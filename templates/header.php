@@ -288,7 +288,7 @@ if ($_POST && isset($_POST['condominio_id'])) {
   </style>
 </head>
 
-<body onload="init();" class="bg-dark">
+<body onload="init();" style="background-color: #000000ff; color: white;">
   <header>
     <nav class="navbar navbar-expand-lg navbar-dark navbar-custom ">
       <div class="container-fluid">
@@ -401,7 +401,10 @@ if ($_POST && isset($_POST['condominio_id'])) {
                 <li><a class="dropdown-item" href="<?php echo $url_base; ?>secciones/pagos/index.php">Ingresos</a></li>
                 <li><a class="dropdown-item" href="<?php echo $url_base; ?>secciones/gastos/index.php">Gastos</a></li>
                 <li><a class="dropdown-item" href="<?php echo $url_base; ?>secciones/nomina/index.php">Nomina</a></li>
-                <li><a class="dropdown-item" href="<?php echo $url_base; ?>secciones/conciliacion_bancaria/index.php">Solicitud de cheques</a></li>
+                <li><a class="dropdown-item" href="<?php echo $url_base; ?>secciones/gas/index.php">Gas</a></li>
+                <li><a class="dropdown-item" href="<?php echo $url_base; ?>secciones/aptos/balance_dashboard.php">Balances</a></li>
+                <li><a class="dropdown-item" href="<?php echo $url_base; ?>secciones/cuotasextras/index.php">Cuotas Extras</a></li>
+                <li><a class="dropdown-item" href="<?php echo $url_base; ?>secciones/gastos/solicitud_cheques.php">Solicitud de cheques</a></li>
                 <li><a class="dropdown-item" href="<?php echo $url_base; ?>secciones/conciliacion_bancaria/index.php">Conciliación Bancaria</a></li>
                 <li><a class="dropdown-item" href="<?php echo $url_base; ?>secciones/estado_de_resultado/index.php">Estado de resultado</a></li>
                 <li><a class="dropdown-item" href="#">Facturas</a></li>
@@ -416,7 +419,7 @@ if ($_POST && isset($_POST['condominio_id'])) {
               <ul class="dropdown-menu">
                 <li><a class="dropdown-item" target="_blank" href="<?php echo $url_base; ?>secciones/nomina/pdf_nomina.php">Nomina</a></li>
                 <li><a class="dropdown-item" target="_blank" href="#">Estado de Cuentas</a></li>
-                <li><a class="dropdown-item" target="_blank" href="#">Solicitud de cheques</a></li>
+                <li><a class="dropdown-item" target="_blank" href="<?php echo $url_base; ?>secciones/nomina/pdf_nomina.php">Solicitud de cheques</a></li>
                 <li><a class="dropdown-item" target="_blank" href="<?php echo $url_base; ?>secciones/conciliacion_bancaria/pdf_conciliacion.php">Conciliación Bancaria</a></li>
                 <li><a class="dropdown-item" target="_blank" href="<?php echo $url_base; ?>secciones/estado_de_resultado/pdf_cuentas_por_cobrar.php">Cuentas Por Cobrar</a></li>
                 <li><a class="dropdown-item" target="_blank" href="<?php echo $url_base; ?>secciones/estado_de_resultado/pdf_estado.php">Estado de Resultado</a></li>

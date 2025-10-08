@@ -1,6 +1,40 @@
 <?php include("../../templates/header.php");
 include("../../bd.php");
 
+// Iniciar sesión si no está iniciada
+if (session_status() === PHP_SESSION_NONE) {
+  session_start();
+}
+
+// Procesar eliminación de pago
+if (isset($_GET['eliminar_pago'])) {
+  $id_pago = $_GET['eliminar_pago'];
+  $idcondominio = $_SESSION['idcondominio'];
+
+  try {
+    $sentencia = $conexion->prepare("DELETE FROM tbl_pagos WHERE id_pago = :id_pago AND id_condominio = :id_condominio");
+    $sentencia->bindParam(":id_pago", $id_pago);
+    $sentencia->bindParam(":id_condominio", $idcondominio);
+    $sentencia->execute();
+
+    $_SESSION['mensaje'] = "✅ Pago eliminado correctamente";
+    $_SESSION['tipo_mensaje'] = "success";
+  } catch (Exception $e) {
+    $_SESSION['mensaje'] = "❌ Error al eliminar el pago: " . $e->getMessage();
+    $_SESSION['tipo_mensaje'] = "danger";
+  }
+
+  header("Location: " . $_SERVER['HTTP_REFERER']);
+  exit;
+}
+
+// Mostrar mensajes de sesión
+if (isset($_SESSION['mensaje'])) {
+  echo "<div class='alert alert-{$_SESSION['tipo_mensaje']}'>{$_SESSION['mensaje']}</div>";
+  unset($_SESSION['mensaje']);
+  unset($_SESSION['tipo_mensaje']);
+}
+
 if (isset($_GET['txID'])) {
   $txtID = (isset($_GET['txID'])) ? $_GET['txID'] : "";
   $sentencia = $conexion->prepare("SELECT * FROM tbl_aptos WHERE id=:id");
@@ -50,19 +84,28 @@ if (isset($_POST['monto'])) { // verificamos que se envió el formulario
 
     ////////////////////////////////////////////////
     // include '../../actualizar_balance.php';
-    //////////////////////////////////////////////
+    ////////////////////////////////////////////
+    $_SESSION['mensaje'] = "✅ Pago registrado y balance actualizado correctamente.";
+    $_SESSION['tipo_mensaje'] = "success";
+    // Después de registrar el pago
+    include 'actualizar_balance.php';
+    $resultado = actualizarBalanceApto($id_Apto, $id_condominio);
 
+    if ($resultado['success']) {
+      $_SESSION['mensaje'] = "✅ Pago registrado y balance actualizado correctamente.";
+      $_SESSION['tipo_mensaje'] = "success";
+    } else {
+      $_SESSION['mensaje'] = "❌ Error al actualizar el balance: " . $resultado['error'];
+      $_SESSION['tipo_mensaje'] = "danger";
+    }
 
-    echo "✅ Pago registrado y balance actualizado correctamente.";
+    header("Location: " . $_SERVER['HTTP_REFERER']);
+    exit;
   } catch (Exception $e) {
     echo "<div class='alert alert-danger'>❌ Error al registrar el pago: " . $e->getMessage() . "</div>";
   }
 }
-
-
-
-if (isset($_POST['boton'])) {
-
+if (isset($_POST['formEditarTicket'])) {
   $txtID = (isset($_GET['txID'])) ? $_GET['txID'] : "";
   //recoleccion de datos
   $id = (isset($_POST["id"]) ? $_POST["id"] : "");
@@ -72,10 +115,10 @@ if (isset($_POST['boton'])) {
   $cuota = (isset($_POST["cuota_e"]) ? $_POST["cuota_e"] : "");
   // Verificación del checkbox y asignación del valor correspondiente
   $estado_pago = isset($_POST['estado_pago']) ? 'Pago' : 'Pendiente';
+  $mes_ultimo_pago = (isset($_POST["mes"]) ? $_POST["mes"] : "");
 
   //preparar insercion
-  $sentencia = $conexion->prepare("UPDATE tbl_tickets SET mantenimiento=:mantenimiento, gas=:gas, mora=:mora, cuota=:cuota, estado=:estado 
-    WHERE id=:id");
+  $sentencia = $conexion->prepare("UPDATE tbl_tickets SET mantenimiento=:mantenimiento, gas=:gas, mora=:mora, cuota=:cuota, estado=:estado WHERE id=:id");
   //Asignando los valores de metodo post(del formulario)
   $sentencia->bindParam(":mantenimiento", $mantenimiento);
   $sentencia->bindParam(":gas", $gas);
@@ -84,9 +127,43 @@ if (isset($_POST['boton'])) {
   $sentencia->bindParam(":estado", $estado_pago);
   $sentencia->bindParam(":id", $id);
   $sentencia->execute();
-};
 
+  // ACTUALIZAR FECHA_ULTIMO_PAGO EN TBL_APTOS CUANDO SE MARCA COMO PAGO
+  if ($estado_pago == 'Pago') {
+    // Obtener el id_condominio de la sesión
+    $id_condominio = $_SESSION['idcondominio'];
 
+    // Actualizar fecha_ultimo_pago en tbl_aptos con el mes del ticket
+    $sentencia_fecha = $conexion->prepare("
+            UPDATE tbl_aptos 
+            SET fecha_ultimo_pago = :fecha_ultimo_pago 
+            WHERE id = :id_apto 
+            AND id_condominio = :id_condominio
+        ");
+    $sentencia_fecha->bindParam(":fecha_ultimo_pago", $mes_ultimo_pago);
+    $sentencia_fecha->bindParam(":id_apto", $txtID);
+    $sentencia_fecha->bindParam(":id_condominio", $id_condominio);
+    $sentencia_fecha->execute();
+
+    $_SESSION['mensaje'] = "✅ Ticket actualizado, marcado como Pagado y fecha de último pago actualizada.";
+    $_SESSION['tipo_mensaje'] = "success";
+  } else {
+    $_SESSION['mensaje'] = "✅ Ticket actualizado y marcado como Pendiente.";
+    $_SESSION['tipo_mensaje'] = "warning";
+  }
+
+  // Actualizar balance
+  include 'actualizar_balance.php';
+  $resultado = actualizarBalanceApto($txtID, $id_condominio);
+
+  if (!$resultado['success']) {
+    $_SESSION['mensaje'] = "⚠️ Ticket actualizado pero error al actualizar balance: " . $resultado['error'];
+    $_SESSION['tipo_mensaje'] = "danger";
+  }
+
+  header("Location: " . $_SERVER['HTTP_REFERER']);
+  exit;
+}
 //Seleccion de mes para color de fondo de meses debidos
 $mes_actual = $_SESSION['mes'];
 
@@ -105,7 +182,30 @@ $sentencia->bindParam(":txtID", $txtID);
 $sentencia->execute();
 $lista_tickets = $sentencia->fetchAll((PDO::FETCH_ASSOC));
 
-$sentencia = $conexion->prepare("SELECT * FROM tbl_pagos where id_condominio=:idcondominio and id_apto=:txtID");
+// 🔹 Obtener el valor más reciente de gas desde tbl_gas
+$mes_actual = date('n'); // número del mes actual
+$anio_actual = date('Y');
+
+$sentencia_gas = $conexion->prepare("
+  SELECT gas_insertado 
+  FROM tbl_gas 
+  WHERE id_apto = :id_apto 
+    AND id_condominio = :id_condominio 
+    AND mes = :mes 
+    AND anio = :anio
+  ORDER BY fecha_registro DESC 
+  LIMIT 1
+");
+$sentencia_gas->bindParam(":id_apto", $txtID);
+$sentencia_gas->bindParam(":id_condominio", $idcondominio);
+$sentencia_gas->bindParam(":mes", $mes_actual);
+$sentencia_gas->bindParam(":anio", $anio_actual);
+$sentencia_gas->execute();
+$gas_data = $sentencia_gas->fetch(PDO::FETCH_ASSOC);
+
+$gas_actual = $gas_data ? $gas_data['gas_insertado'] : 0; // si no hay, poner 0
+
+$sentencia = $conexion->prepare("SELECT * FROM tbl_pagos where id_condominio=:idcondominio and id_apto=:txtID ORDER BY fecha_pago DESC");
 $sentencia->bindParam(":idcondominio", $idcondominio);
 $sentencia->bindParam(":txtID", $txtID);
 $sentencia->execute();
@@ -118,6 +218,10 @@ $lista_condominios = $sentencia->fetchAll((PDO::FETCH_ASSOC));
 
 foreach ($lista_condominios as $registro) {
   $varmora = $registro['cant_mora'];
+}
+
+foreach ($lista_aptos as $registro) {
+  $varmantenimiento = $registro['mantenimiento'];
 }
 
 ?>
@@ -144,7 +248,6 @@ foreach ($lista_condominios as $registro) {
         </thead>
         <tbody>
           <?php foreach ($lista_aptos as $registro) { ?>
-
             <tr class="">
               <td scope="row"><?php echo $registro['apto'] ?></td>
               <td scope="row"><?php echo $registro['condominos'] ?></td>
@@ -156,10 +259,8 @@ foreach ($lista_condominios as $registro) {
               <td scope="row"><?php echo $registro['telefono'] ?></td>
               <td scope="row"><?php echo $registro['correo'] ?></td>
               <td scope="row"><?php echo $registro['fecha_ultimo_pago'] ?></td>
-
             </tr>
-          <?php
-          } ?>
+          <?php } ?>
         </tbody>
       </table>
     </div>
@@ -173,25 +274,23 @@ foreach ($lista_condominios as $registro) {
   <div class="card-body">
 
     <!-- Botón para abrir el modal -->
-    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalPago">
+    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalNuevoPago">
       ➕ Nuevo Pago
     </button>
 
-
-    <!-- Modal -->
-    <div class="modal fade" id="modalPago" tabindex="-1" aria-labelledby="modalPagoLabel" aria-hidden="true">
+    <!-- Modal NUEVO PAGO -->
+    <div class="modal fade" id="modalNuevoPago" tabindex="-1" aria-labelledby="modalNuevoPagoLabel" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
-
           <!-- Header -->
           <div class="modal-header bg-dark text-white">
-            <h2 class="modal-title" id="modalPagoLabel">REGISTRAR PAGO</h2>
+            <h2 class="modal-title" id="modalNuevoPagoLabel">REGISTRAR PAGO</h2>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
           </div>
 
           <!-- Body con el formulario -->
           <div class="modal-body text-bold bg-success text-white">
-            <form action="" method="POST" id="pagos">
+            <form action="" method="POST" id="formNuevoPago">
               <div class="row">
                 <!-- Apartamento -->
                 <div class="mb-3 col-2 fs-5 fw-bold">
@@ -244,7 +343,7 @@ foreach ($lista_condominios as $registro) {
           <!-- Footer con botones -->
           <div class="modal-footer bg-dark text-white">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-            <button type="submit" form="pagos" class="btn btn-primary">💾 Guardar Pago</button>
+            <button type="submit" form="formNuevoPago" class="btn btn-primary">💾 Guardar Pago</button>
           </div>
         </div>
       </div>
@@ -260,21 +359,16 @@ foreach ($lista_condominios as $registro) {
             <th scope="col">Forma de Pago</th>
             <th scope="col">Fecha de Pago</th>
             <th scope="col">Registrado por</th>
-            <th scope="col">Acción</th>
+            <th scope="col">Acciones</th>
           </tr>
         </thead>
         <tbody>
           <?php foreach ($lista_pagos as $registro) { ?>
             <tr>
-              <td><?php echo $registro['concepto']; ?></td>
-              <td><?php echo number_format(floatval($registro['monto']), 2, '.', ','); ?></td>
-              <td><?php echo $registro['forma_pago']; ?></td>
-              <td><?php echo $registro['fecha_pago']; ?></td>
-              <td><?php echo $registro['usuario_registro']; ?></td>
               <td>
                 <button class="btn btn-primary btn-sm"
                   data-bs-toggle="modal"
-                  data-bs-target="#modalPago"
+                  data-bs-target="#modalEditarPago"
                   data-id="<?php echo $registro['id_pago']; ?>"
                   data-apto="<?php echo $registro['id_apto']; ?>"
                   data-concepto="<?php echo $registro['concepto']; ?>"
@@ -282,8 +376,22 @@ foreach ($lista_condominios as $registro) {
                   data-forma="<?php echo $registro['forma_pago']; ?>"
                   data-fecha="<?php echo $registro['fecha_pago']; ?>"
                   data-usuario="<?php echo $registro['usuario_registro']; ?>">
-                  Editar
+                  <?php echo $registro['concepto']; ?>
                 </button>
+              </td>
+              <td><?php echo number_format(floatval($registro['monto']), 2, '.', ','); ?></td>
+              <td><?php echo $registro['forma_pago']; ?></td>
+              <td><?php $fechaDB = $registro['fecha_pago'];
+                  $fechaFormateada = date("d/m/Y", strtotime($fechaDB));
+                  echo $fechaFormateada;
+                  ?></td>
+              <td><?php echo $registro['usuario_registro']; ?></td>
+              <td>
+                <a class="btn btn-danger btn-sm"
+                  href="javascript:eliminarPago(<?php echo $registro['id_pago']; ?>)"
+                  title="Eliminar pago">
+                  ❌
+                </a>
               </td>
             </tr>
           <?php } ?>
@@ -291,16 +399,16 @@ foreach ($lista_condominios as $registro) {
       </table>
     </div>
 
-    <!-- Modal único para editar pagos -->
-    <div class="modal fade" id="modalPago" tabindex="-1" aria-labelledby="modalPagoLabel" aria-hidden="true">
+    <!-- Modal EDITAR PAGO -->
+    <div class="modal fade" id="modalEditarPago" tabindex="-1" aria-labelledby="modalEditarPagoLabel" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header bg-dark text-white">
-            <h3 class="modal-title" id="modalPagoLabel">Editar Pago</h3>
+            <h3 class="modal-title" id="modalEditarPagoLabel">Editar Pago</h3>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
           </div>
           <div class="modal-body">
-            <form action="" method="post" id="formPago">
+            <form action="" method="post" id="formEditarPago">
               <input type="hidden" name="id_pago" id="pago_id">
 
               <div class="mb-3">
@@ -340,8 +448,9 @@ foreach ($lista_condominios as $registro) {
     </div>
 
     <script>
-      var modalPago = document.getElementById('modalPago');
-      modalPago.addEventListener('show.bs.modal', function(event) {
+      // Script para el modal de EDITAR PAGO
+      var modalEditarPago = document.getElementById('modalEditarPago');
+      modalEditarPago.addEventListener('show.bs.modal', function(event) {
         var button = event.relatedTarget;
 
         document.getElementById('pago_id').value = button.getAttribute('data-id');
@@ -349,9 +458,32 @@ foreach ($lista_condominios as $registro) {
         document.getElementById('pago_concepto').value = button.getAttribute('data-concepto');
         document.getElementById('pago_monto').value = button.getAttribute('data-monto');
         document.getElementById('pago_forma').value = button.getAttribute('data-forma');
-        document.getElementById('pago_fecha').value = button.getAttribute('data-fecha').replace(' ', 'T');
+
+        // Formatear la fecha para datetime-local
+        var fechaOriginal = button.getAttribute('data-fecha');
+        var fechaFormateada = fechaOriginal.replace(' ', 'T');
+        document.getElementById('pago_fecha').value = fechaFormateada;
+
         document.getElementById('pago_usuario').value = button.getAttribute('data-usuario');
       });
+
+      // Función para eliminar pago
+      function eliminarPago(idPago) {
+        Swal.fire({
+          title: '¿Eliminar este pago?',
+          text: "Esta acción no se puede deshacer",
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          cancelButtonColor: '#3085d6',
+          confirmButtonText: 'Sí, eliminar',
+          cancelButtonText: 'Cancelar'
+        }).then((result) => {
+          if (result.isConfirmed) {
+            window.location = "?txID=<?php echo $txtID; ?>&eliminar_pago=" + idPago;
+          }
+        });
+      }
     </script>
   </div>
 </div>
@@ -370,19 +502,16 @@ foreach ($lista_condominios as $registro) {
             <th>Mora</th>
             <th>Gas</th>
             <th>Cuota</th>
+            <th>Total</th>
+            <th>Estado</th>
             <th>Fecha</th>
-            <th>Acción</th>
           </tr>
         </thead>
         <tbody>
-          <?php foreach ($lista_tickets as $ticket) { ?>
+          <?php foreach ($lista_tickets as $ticket) {
+            $total_ticket = $ticket['mantenimiento'] + $ticket['mora'] + $ticket['gas'] + $ticket['cuota'];
+          ?>
             <tr>
-              <td><?php echo $ticket['mes']; ?></td>
-              <td><?php echo number_format($ticket['mantenimiento'], 2, '.', ','); ?></td>
-              <td><?php echo number_format($ticket['mora'], 2, '.', ','); ?></td>
-              <td><?php echo number_format($ticket['gas'], 2, '.', ','); ?></td>
-              <td><?php echo number_format($ticket['cuota'], 2, '.', ','); ?></td>
-              <td><?php echo $ticket['fecha_actual']; ?></td>
               <td>
                 <button class="btn btn-primary btn-sm"
                   data-bs-toggle="modal"
@@ -395,9 +524,23 @@ foreach ($lista_condominios as $registro) {
                   data-cuota="<?php echo $ticket['cuota']; ?>"
                   data-estado="<?php echo $ticket['estado']; ?>"
                   data-fecha="<?php echo $ticket['fecha_actual']; ?>">
-                  Editar
+                  <?php echo $ticket['mes']; ?>
                 </button>
               </td>
+              <td><?php echo number_format($ticket['mantenimiento'], 2, '.', ','); ?></td>
+              <td><?php echo number_format($ticket['mora'], 2, '.', ','); ?></td>
+              <td><?php echo number_format($ticket['gas'], 2, '.', ','); ?></td>
+              <td><?php echo number_format($ticket['cuota'], 2, '.', ','); ?></td>
+              <td><strong><?php echo number_format($total_ticket, 2, '.', ','); ?></strong></td>
+              <td>
+                <span class="badge <?php echo $ticket['estado'] == 'Pago' ? 'bg-success' : 'bg-warning'; ?>">
+                  <?php echo $ticket['estado']; ?>
+                </span>
+              </td>
+              <td><?php $fechaDB = $ticket['fecha_actual'];
+                  $fechaFormateada = date("d/m/Y", strtotime($fechaDB));
+                  echo $fechaFormateada;
+                  ?></td>
             </tr>
           <?php } ?>
         </tbody>
@@ -414,27 +557,28 @@ foreach ($lista_condominios as $registro) {
           </div>
           <div class="modal-body bg-success text-white">
             <form method="POST" id="formEditarTicket">
+              <input type="hidden" name="formEditarTicket" value="1">
               <input type="hidden" name="id" id="ticket_id">
 
               <div class="row mb-3">
                 <div class="col-4">
                   <label>Mes:</label>
-                  <input type="text" class="form-control" id="ticket_mes" readonly>
+                  <input type="text" class="form-control" id="ticket_mes" name="mes" readonly>
                 </div>
                 <div class="col-4">
                   <label>Mantenimiento:</label>
-                  <input type="number" step="0.01" class="form-control" name="mantenimiento" id="ticket_mantenimiento">
+                  <input type="number" step="0.01" class="form-control" name="mantenimiento" id="ticket_mantenimiento" value="<?php echo $varmantenimiento; ?>" required>
                 </div>
                 <div class="col-4">
                   <label>Gas:</label>
-                  <input type="number" step="0.01" class="form-control" name="gas" id="ticket_gas">
+                  <input type="number" step="0.01" class="form-control" name="gas" id="ticket_gas" value="<?php echo $gas_actual; ?>" readonly>
                 </div>
               </div>
 
               <div class="row mb-3">
                 <div class="col-4">
                   <label>Cuota Extra:</label>
-                  <input type="number" step="0.01" class="form-control" name="cuota" id="ticket_cuota">
+                  <input type="number" step="0.01" class="form-control" name="cuota_e" id="ticket_cuota" readonly>
                 </div>
                 <div class="col-4">
                   <label>Mora:</label>
@@ -442,26 +586,32 @@ foreach ($lista_condominios as $registro) {
                 </div>
                 <div class="col-4">
                   <label>Fecha:</label>
-                  <input type="date" class="form-control bg-warning text-dark" name="fecha_actual" id="ticket_fecha">
+                  <input type="date" class="form-control bg-warning text-dark" name="fecha_actual" id="ticket_fecha" required>
                 </div>
               </div>
 
               <div class="mb-3">
                 <label>Total:</label>
-                <input type="number" step="0.01" class="form-control" name="total" id="ticket_total" readonly>
+                <input type="number" step="0.01" class="form-control" name="total" id="ticket_total" readonly required>
+              </div>
+
+              <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" name="estado_pago" id="estado_pago">
+                <label class="form-check-label" for="estado_pago">Marcar como Pagado</label>
               </div>
 
               <div class="mb-3">
                 <button type="button" id="btnAplicarMora" class="btn btn-danger mt-1">Aplicar Mora</button>
-                <button type="button" id="btnCalcular" class="btn btn-primary mt-1">Calcular</button>
+                <button type="button" id="btnCalcular" class="btn btn-primary mt-1">Calcular Total</button>
               </div>
 
-            </form>
           </div>
-        </div>
-        <div class="modal-footer bg-dark text-white">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" form="formEditarTicket" class="btn btn-primary">💾 Guardar cambios</button>
+          <div class="modal-footer bg-dark text-white">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" form="formEditarTicket" class="btn btn-primary">💾 Guardar cambios</button>
+          </div>
+
+          </form>
         </div>
       </div>
     </div>
@@ -473,17 +623,18 @@ foreach ($lista_condominios as $registro) {
   const modalTicketEl = document.getElementById('modalTicket');
   const mantInput = document.getElementById('ticket_mantenimiento');
   const cuotaInput = document.getElementById('ticket_cuota');
+  const gasInput = document.getElementById('ticket_gas');
   const moraInput = document.getElementById('ticket_mora');
   const totalInput = document.getElementById('ticket_total');
   const btnAplicar = document.getElementById('btnAplicarMora');
-
-
+  const btnCalcular = document.getElementById('btnCalcular');
 
   function calcularTotalTicket() {
     const mant = parseFloat(mantInput.value) || 0;
     const cuota = parseFloat(cuotaInput.value) || 0;
     const mora = parseFloat(moraInput.value) || 0;
-    totalInput.value = (mant + cuota + mora).toFixed(2);
+    const gas = parseFloat(gasInput.value) || 0;
+    totalInput.value = (mant + cuota + mora + gas).toFixed(2);
   }
 
   btnAplicar.addEventListener('click', () => {
@@ -494,26 +645,45 @@ foreach ($lista_condominios as $registro) {
     calcularTotalTicket();
   });
 
+  btnCalcular.addEventListener('click', () => {
+    calcularTotalTicket();
+  });
+
   mantInput.addEventListener('input', calcularTotalTicket);
   cuotaInput.addEventListener('input', calcularTotalTicket);
+  gasInput.addEventListener('input', calcularTotalTicket);
+  moraInput.addEventListener('input', calcularTotalTicket);
 
   modalTicketEl.addEventListener('show.bs.modal', function(event) {
     const button = event.relatedTarget;
+
     document.getElementById('ticket_id').value = button.getAttribute('data-id');
     document.getElementById('ticket_mes').value = button.getAttribute('data-mes');
-    mantInput.value = button.getAttribute('data-mantenimiento');
+
+    // Si el mantenimiento del ticket es 0, usar el valor por defecto del apartamento
+    const mantTicket = button.getAttribute('data-mantenimiento');
+    mantInput.value = mantTicket > 0 ? mantTicket : <?php echo $varmantenimiento; ?>;
+
     moraInput.value = button.getAttribute('data-mora');
-    document.getElementById('ticket_gas').value = button.getAttribute('data-gas');
+    gasInput.value = button.getAttribute('data-gas');
     cuotaInput.value = button.getAttribute('data-cuota');
-    document.getElementById('ticket_estado').checked = button.getAttribute('data-estado') === 'Pago';
-    document.getElementById('ticket_fecha').value = button.getAttribute('data-fecha');
+
+    // Formatear fecha para input date
+    var fechaOriginal = button.getAttribute('data-fecha');
+    var fechaFormateada = fechaOriginal.split(' ')[0]; // Tomar solo la parte de la fecha
+    document.getElementById('ticket_fecha').value = fechaFormateada;
+
+    // Marcar checkbox si está pagado
+    const estadoCheckbox = document.getElementById('estado_pago');
+    estadoCheckbox.checked = button.getAttribute('data-estado') === 'Pago';
+
+    // Recalcular el total
     calcularTotalTicket();
   });
 </script>
 
 </div>
 </div>
-
 
 <br>
 <?php include("../../templates/footer.php"); ?>
