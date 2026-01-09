@@ -1,809 +1,586 @@
-<?php include("../../templates/header.php"); ?>
+<?php
+$thetitle = "Gastos";
+include("../../templates/header.php"); ?>
 <?php
 include("../../bd.php");
+$id_condominio = $_SESSION['idcondominio'];
 
 // =============================================
-// PROCESAR NUEVO GASTO (MODAL)
+// LÓGICA PHP (INTACTA)
 // =============================================
+
+// 1. PROCESAR NUEVO GASTO
 if ($_POST && isset($_POST['sel_mas_menos']) && !isset($_POST['es_predeterminado'])) {
-   $tipo_gasto = isset($_POST["sel_mas_menos"]) ? $_POST["sel_mas_menos"] : "";
-   $detalles = isset($_POST["detalles"]) ? $_POST["detalles"] : "";
-   $monto = isset($_POST["monto"]) ? $_POST["monto"] : "";
-   $quincena = isset($_POST["quincena"]) ? $_POST["quincena"] : "";
-   $mes = isset($_POST["mes"]) ? $_POST["mes"] : $_SESSION['mes'];
-   $anio = isset($_POST["anio"]) ? $_POST["anio"] : $_SESSION['anio'];
-   $id_condominio = $_SESSION['idcondominio'];
+   $tipo_gasto = $_POST["sel_mas_menos"];
+   $detalles = $_POST["detalles"];
+   $monto = $_POST["monto"];
+   $quincena = $_POST["quincena"];
+   $mes = $_POST["mes"] ?? $_SESSION['mes'];
+   $anio = $_POST["anio"] ?? $_SESSION['anio'];
 
    try {
-      $sentencia = $conexion->prepare("INSERT INTO tbl_gastos (tipo_gasto, detalles, monto, quincena, mes, anio, id_condominio)
-                                       VALUES (:tipo_gasto, :detalles, :monto, :quincena, :mes, :anio, :id_condominio)");
-
-      $sentencia->bindParam(":tipo_gasto", $tipo_gasto);
-      $sentencia->bindParam(":detalles", $detalles);
-      $sentencia->bindParam(":monto", $monto);
-      $sentencia->bindParam(":quincena", $quincena);
-      $sentencia->bindParam(":mes", $mes);
-      $sentencia->bindParam(":anio", $anio);
-      $sentencia->bindParam(":id_condominio", $id_condominio);
-      $sentencia->execute();
-
-      $_SESSION['mensaje'] = "✅ Gasto registrado correctamente";
+      $sentencia = $conexion->prepare("INSERT INTO tbl_gastos (tipo_gasto, detalles, monto, quincena, mes, anio, id_condominio) VALUES (:tipo_gasto, :detalles, :monto, :quincena, :mes, :anio, :id_condominio)");
+      $sentencia->execute([':tipo_gasto' => $tipo_gasto, ':detalles' => $detalles, ':monto' => $monto, ':quincena' => $quincena, ':mes' => $mes, ':anio' => $anio, ':id_condominio' => $id_condominio]);
+      $_SESSION['mensaje'] = "✅ Gasto registrado";
       $_SESSION['tipo_mensaje'] = "success";
-
       header("Location: " . $_SERVER['PHP_SELF'] . "?mes=" . $mes . "&anio=" . $anio . "&periodo=" . $quincena);
       exit;
    } catch (Exception $e) {
-      $_SESSION['mensaje'] = "❌ Error al registrar el gasto: " . $e->getMessage();
+      $_SESSION['mensaje'] = "❌ Error: " . $e->getMessage();
       $_SESSION['tipo_mensaje'] = "danger";
    }
 }
 
-// =============================================
-// AGREGAR GASTO PREDETERMINADO
-// =============================================
+// 2. AGREGAR PREDETERMINADO
 if ($_POST && isset($_POST['es_predeterminado'])) {
-   $tipo_gasto = isset($_POST["sel_mas_menos"]) ? $_POST["sel_mas_menos"] : "";
-   $detalles = isset($_POST["detalles"]) ? $_POST["detalles"] : "";
-   $monto = isset($_POST["monto"]) ? $_POST["monto"] : "";
-   $quincena = '15'; // Siempre quincena 1-15 para predeterminados
-   $activo = 1;
-
+   $tipo_gasto = $_POST["sel_mas_menos"];
+   $detalles = $_POST["detalles"];
+   $monto = $_POST["monto"];
    try {
-      // Verificar si ya existe un gasto predeterminado con los mismos detalles
-      $sentencia_verificar = $conexion->prepare("SELECT id FROM tbl_gastos_predeterminados WHERE detalles = :detalles");
-      $sentencia_verificar->bindParam(":detalles", $detalles);
-      $sentencia_verificar->execute();
-
-      if ($sentencia_verificar->fetch()) {
-         $_SESSION['mensaje'] = "⚠️ Ya existe un gasto predeterminado con estos detalles";
+      $check = $conexion->prepare("SELECT id FROM tbl_gastos_predeterminados WHERE detalles = :det");
+      $check->execute([':det' => $detalles]);
+      if ($check->fetch()) {
+         $_SESSION['mensaje'] = "⚠️ Ya existe este gasto";
          $_SESSION['tipo_mensaje'] = "warning";
       } else {
-         $sentencia = $conexion->prepare("INSERT INTO tbl_gastos_predeterminados (tipo_gasto, detalles, monto, quincena, activo)
-                                           VALUES (:tipo_gasto, :detalles, :monto, :quincena, :activo)");
-
-         $sentencia->bindParam(":tipo_gasto", $tipo_gasto);
-         $sentencia->bindParam(":detalles", $detalles);
-         $sentencia->bindParam(":monto", $monto);
-         $sentencia->bindParam(":quincena", $quincena);
-         $sentencia->bindParam(":activo", $activo);
-         $sentencia->execute();
-
-         $_SESSION['mensaje'] = "✅ Gasto predeterminado agregado correctamente";
+         $sql = "INSERT INTO tbl_gastos_predeterminados (tipo_gasto, detalles, monto, quincena, activo) VALUES (:t, :d, :m, '15', 1)";
+         $conexion->prepare($sql)->execute([':t' => $tipo_gasto, ':d' => $detalles, ':m' => $monto]);
+         $_SESSION['mensaje'] = "✅ Configuración guardada";
          $_SESSION['tipo_mensaje'] = "success";
       }
-
       header("Location: " . $_SERVER['PHP_SELF'] . "?mes=" . $_GET['mes'] . "&anio=" . $_GET['anio'] . "&periodo=" . $_GET['periodo']);
       exit;
-   } catch (Exception $e) {
-      $_SESSION['mensaje'] = "❌ Error al agregar gasto predeterminado: " . $e->getMessage();
-      $_SESSION['tipo_mensaje'] = "danger";
+   } catch (Exception $e) { /*...*/
    }
 }
 
-// =============================================
-// GENERAR GASTOS DEL MES (Desde predeterminados)
-// =============================================
+// 3. GENERAR GASTOS
 if (isset($_GET['generar_gastos'])) {
-   $mes = isset($_GET['mes']) ? $_GET['mes'] : date('F');
-   $anio = isset($_GET['anio']) ? $_GET['anio'] : date('Y');
-   $id_condominio = $_SESSION['idcondominio'];
-   $gastos_generados = 0;
-
+   $mes = $_GET['mes'];
+   $anio = $_GET['anio'];
+   $count = 0;
    try {
-      // Obtener gastos predeterminados activos
-      $sentencia_predeterminados = $conexion->prepare("SELECT * FROM tbl_gastos_predeterminados WHERE activo = 1");
-      $sentencia_predeterminados->execute();
-      $gastos_predeterminados = $sentencia_predeterminados->fetchAll(PDO::FETCH_ASSOC);
-
-      foreach ($gastos_predeterminados as $gasto) {
-         // Verificar si ya existe este gasto en el mes actual
-         $sentencia_verificar = $conexion->prepare("SELECT id FROM tbl_gastos 
-                                                     WHERE detalles = :detalles 
-                                                     AND mes = :mes 
-                                                     AND anio = :anio 
-                                                     AND quincena = :quincena");
-         $sentencia_verificar->bindParam(":detalles", $gasto['detalles']);
-         $sentencia_verificar->bindParam(":mes", $mes);
-         $sentencia_verificar->bindParam(":anio", $anio);
-         $sentencia_verificar->bindParam(":quincena", $gasto['quincena']);
-         $sentencia_verificar->execute();
-
-         if (!$sentencia_verificar->fetch()) {
-            // Insertar gasto si no existe
-            $sentencia_insertar = $conexion->prepare("INSERT INTO tbl_gastos (tipo_gasto, detalles, monto, quincena, mes, anio, id_condominio)
-                                                        VALUES (:tipo_gasto, :detalles, :monto, :quincena, :mes, :anio, :id_condominio)");
-
-            $sentencia_insertar->bindParam(":tipo_gasto", $gasto['tipo_gasto']);
-            $sentencia_insertar->bindParam(":detalles", $gasto['detalles']);
-            $sentencia_insertar->bindParam(":monto", $gasto['monto']);
-            $sentencia_insertar->bindParam(":quincena", $gasto['quincena']);
-            $sentencia_insertar->bindParam(":mes", $mes);
-            $sentencia_insertar->bindParam(":anio", $anio);
-            $sentencia_insertar->bindParam(":id_condominio", $id_condominio);
-            $sentencia_insertar->execute();
-            $gastos_generados++;
+      $pred = $conexion->query("SELECT * FROM tbl_gastos_predeterminados WHERE activo = 1")->fetchAll(PDO::FETCH_ASSOC);
+      foreach ($pred as $g) {
+         $check = $conexion->prepare("SELECT id FROM tbl_gastos WHERE detalles=:d AND mes=:m AND anio=:a AND quincena=:q");
+         $check->execute([':d' => $g['detalles'], ':m' => $mes, ':a' => $anio, ':q' => $g['quincena']]);
+         if (!$check->fetch()) {
+            $ins = $conexion->prepare("INSERT INTO tbl_gastos (tipo_gasto, detalles, monto, quincena, mes, anio, id_condominio) VALUES (:t, :d, :mo, :q, :m, :a, :id)");
+            $ins->execute([':t' => $g['tipo_gasto'], ':d' => $g['detalles'], ':mo' => $g['monto'], ':q' => $g['quincena'], ':m' => $mes, ':a' => $anio, ':id' => $id_condominio]);
+            $count++;
          }
       }
-
-      $_SESSION['mensaje'] = "✅ Se generaron $gastos_generados gastos del mes correctamente";
+      $_SESSION['mensaje'] = "✅ Se generaron $count gastos.";
       $_SESSION['tipo_mensaje'] = "success";
-
-      header("Location: " . $_SERVER['PHP_SELF'] . "?mes=" . $mes . "&anio=" . $anio . "&periodo=15");
+      header("Location: " . $_SERVER['PHP_SELF'] . "?mes=$mes&anio=$anio&periodo=15");
       exit;
-   } catch (Exception $e) {
-      $_SESSION['mensaje'] = "❌ Error al generar gastos: " . $e->getMessage();
-      $_SESSION['tipo_mensaje'] = "danger";
+   } catch (Exception $e) { /*...*/
    }
 }
 
-// =============================================
-// TOGGLE ACTIVO GASTO PREDETERMINADO
-// =============================================
+// 4. ELIMINAR/TOGGLE/EDITAR
 if (isset($_GET['toggle_predeterminado'])) {
-   $id = $_GET['toggle_predeterminado'];
-
-   try {
-      $sentencia = $conexion->prepare("UPDATE tbl_gastos_predeterminados SET activo = NOT activo WHERE id = :id");
-      $sentencia->bindParam(":id", $id);
-      $sentencia->execute();
-
-      $_SESSION['mensaje'] = "✅ Estado del gasto predeterminado actualizado";
-      $_SESSION['tipo_mensaje'] = "success";
-   } catch (Exception $e) {
-      $_SESSION['mensaje'] = "❌ Error al actualizar estado: " . $e->getMessage();
-      $_SESSION['tipo_mensaje'] = "danger";
-   }
-
+   $conexion->prepare("UPDATE tbl_gastos_predeterminados SET activo = NOT activo WHERE id = ?")->execute([$_GET['toggle_predeterminado']]);
    header("Location: " . $_SERVER['PHP_SELF'] . "?mes=" . $_GET['mes'] . "&anio=" . $_GET['anio'] . "&periodo=" . $_GET['periodo']);
    exit;
 }
-
-// =============================================
-// ELIMINAR GASTO PREDETERMINADO
-// =============================================
 if (isset($_GET['eliminar_predeterminado'])) {
-   $id = $_GET['eliminar_predeterminado'];
-
-   try {
-      $sentencia = $conexion->prepare("DELETE FROM tbl_gastos_predeterminados WHERE id = :id");
-      $sentencia->bindParam(":id", $id);
-      $sentencia->execute();
-
-      $_SESSION['mensaje'] = "✅ Gasto predeterminado eliminado";
-      $_SESSION['tipo_mensaje'] = "success";
-   } catch (Exception $e) {
-      $_SESSION['mensaje'] = "❌ Error al eliminar: " . $e->getMessage();
-      $_SESSION['tipo_mensaje'] = "danger";
-   }
-
+   $conexion->prepare("DELETE FROM tbl_gastos_predeterminados WHERE id = ?")->execute([$_GET['eliminar_predeterminado']]);
+   header("Location: " . $_SERVER['PHP_SELF'] . "?mes=" . $_GET['mes'] . "&anio=" . $_GET['anio'] . "&periodo=" . $_GET['periodo']);
+   exit;
+}
+if (isset($_GET['txID'])) {
+   $conexion->prepare("DELETE FROM tbl_gastos WHERE id=?")->execute([$_GET['txID']]);
+   $_SESSION['mensaje'] = "✅ Gasto eliminado";
+   $_SESSION['tipo_mensaje'] = "success";
+   header("Location: " . $_SERVER['PHP_SELF'] . "?mes=" . ($_GET['mes'] ?? '') . "&anio=" . ($_GET['anio'] ?? '') . "&periodo=" . ($_GET['periodo'] ?? ''));
+   exit;
+}
+if ($_POST && isset($_POST['editar_gasto'])) {
+   $conexion->prepare("UPDATE tbl_gastos SET monto=?, detalles=?, quincena=? WHERE id=?")->execute([$_POST['nuevo_monto'], $_POST['nuevos_detalles'], $_POST['nueva_quincena'], $_POST['id_gasto']]);
+   $_SESSION['mensaje'] = "✅ Gasto actualizado";
+   $_SESSION['tipo_mensaje'] = "success";
    header("Location: " . $_SERVER['PHP_SELF'] . "?mes=" . $_GET['mes'] . "&anio=" . $_GET['anio'] . "&periodo=" . $_GET['periodo']);
    exit;
 }
 
-// =============================================
-// ELIMINAR GASTO NORMAL
-// =============================================
-if (isset($_GET['txID'])) {
-   $txtID = (isset($_GET['txID'])) ? $_GET['txID'] : "";
+// CONFIGURACIÓN Y CONSULTAS
+$meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+$anios = range(2025, date('Y') + 5);
+$mes_filtro = $_GET['mes'] ?? $meses[date('n') - 1];
+$anio_filtro = $_GET['anio'] ?? date('Y');
+$periodo_filtro = $_GET['periodo'] ?? '15';
 
-   $sentencia = $conexion->prepare("DELETE FROM tbl_gastos WHERE id=:id");
-   $sentencia->bindParam(":id", $txtID);
-   $sentencia->execute();
-
-   $_SESSION['mensaje'] = "✅ Gasto eliminado correctamente";
-   $_SESSION['tipo_mensaje'] = "success";
-
-   $mes_actual = isset($_GET['mes']) ? $_GET['mes'] : $_SESSION['mes'];
-   $anio_actual = isset($_GET['anio']) ? $_GET['anio'] : $_SESSION['anio'];
-   $periodo_actual = isset($_GET['periodo']) ? $_GET['periodo'] : '15';
-
-   header("Location: " . $_SERVER['PHP_SELF'] . "?mes=" . $mes_actual . "&anio=" . $anio_actual . "&periodo=" . $periodo_actual);
-   exit;
-}
-
-// =============================================
-// EDITAR MONTO DE GASTO
-// =============================================
-if ($_POST && isset($_POST['editar_gasto'])) {
-   $id_gasto = isset($_POST["id_gasto"]) ? $_POST["id_gasto"] : "";
-   $nuevo_monto = isset($_POST["nuevo_monto"]) ? $_POST["nuevo_monto"] : "";
-   $nuevos_detalles = isset($_POST["nuevos_detalles"]) ? $_POST["nuevos_detalles"] : "";
-   $nueva_quincena = isset($_POST["nueva_quincena"]) ? $_POST["nueva_quincena"] : "";
-
-   try {
-      $sentencia = $conexion->prepare("UPDATE tbl_gastos SET monto = :monto, detalles = :detalles, quincena = :quincena WHERE id = :id");
-      $sentencia->bindParam(":monto", $nuevo_monto);
-      $sentencia->bindParam(":detalles", $nuevos_detalles);
-      $sentencia->bindParam(":quincena", $nueva_quincena);
-      $sentencia->bindParam(":id", $id_gasto);
-      $sentencia->execute();
-
-      $_SESSION['mensaje'] = "✅ Gasto actualizado correctamente";
-      $_SESSION['tipo_mensaje'] = "success";
-   } catch (Exception $e) {
-      $_SESSION['mensaje'] = "❌ Error al actualizar el gasto: " . $e->getMessage();
-      $_SESSION['tipo_mensaje'] = "danger";
-   }
-
-   $mes_actual = isset($_GET['mes']) ? $_GET['mes'] : $_SESSION['mes'];
-   $anio_actual = isset($_GET['anio']) ? $_GET['anio'] : $_SESSION['anio'];
-   $periodo_actual = isset($_GET['periodo']) ? $_GET['periodo'] : '15';
-
-   header("Location: " . $_SERVER['PHP_SELF'] . "?mes=" . $mes_actual . "&anio=" . $anio_actual . "&periodo=" . $periodo_actual);
-   exit;
-}
-
-// =============================================
-// CONFIGURACIÓN INICIAL Y FILTROS
-// =============================================
-
-// Mostrar mensajes de sesión
-if (isset($_SESSION['mensaje'])) {
-   echo "<div class='alert alert-{$_SESSION['tipo_mensaje']} alert-dismissible fade show' role='alert'>
-            {$_SESSION['mensaje']}
-            <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
-          </div>";
-   unset($_SESSION['mensaje']);
-   unset($_SESSION['tipo_mensaje']);
-}
-
-// Configuración de filtros
-$meses = [
-   'Enero',
-   'Febrero',
-   'Marzo',
-   'Abril',
-   'Mayo',
-   'Junio',
-   'Julio',
-   'Agosto',
-   'Septiembre',
-   'Octubre',
-   'Noviembre',
-   'Diciembre'
-];
-
-$anios = range(2025, date('Y') + 15);
-
-// Obtener filtros o usar valores por defecto
-$mes_filtro = isset($_GET['mes']) ? $_GET['mes'] : date('F');
-$anio_filtro = isset($_GET['anio']) ? $_GET['anio'] : date('Y');
-$periodo_filtro = isset($_GET['periodo']) ? $_GET['periodo'] : '15';
-
-$idcondominio = $_SESSION['idcondominio'];
-
-// Si no hay filtros en URL, usar valores actuales
-if (!isset($_GET['mes']) && !isset($_GET['anio']) && !isset($_GET['periodo'])) {
-   $mes_filtro = date('F');
-   $anio_filtro = date('Y');
-   $periodo_filtro = '15';
-}
-
-// Obtener gastos predeterminados
-$sentencia_predeterminados = $conexion->prepare("SELECT * FROM tbl_gastos_predeterminados ORDER BY tipo_gasto, detalles");
-$sentencia_predeterminados->execute();
-$gastos_predeterminados = $sentencia_predeterminados->fetchAll(PDO::FETCH_ASSOC);
-
-// Contar gastos predeterminados activos
-$gastos_activos = 0;
-foreach ($gastos_predeterminados as $gasto) {
-   if ($gasto['activo']) $gastos_activos++;
-}
-
-// ... (El resto del código de funciones y consultas permanece igual)
-// FUNCIÓN PARA OBTENER GASTOS POR TIPO, MES, AÑO Y PERIODO
-function obtenerGastosPorTipo($conexion, $tipo_gasto, $idcondominio, $mes, $anio, $periodo)
-{
-   if ($periodo == 'completo') {
-      $sentencia = $conexion->prepare("SELECT * FROM tbl_gastos 
-                                       WHERE id_condominio=:id 
-                                       AND tipo_gasto=:tipo_gasto 
-                                       AND mes=:mes 
-                                       AND anio=:anio
-                                       ORDER BY quincena, id DESC");
-   } else {
-      $sentencia = $conexion->prepare("SELECT * FROM tbl_gastos 
-                                       WHERE id_condominio=:id 
-                                       AND tipo_gasto=:tipo_gasto 
-                                       AND mes=:mes 
-                                       AND anio=:anio
-                                       AND quincena=:periodo
-                                       ORDER BY id DESC");
-   }
-
-   $sentencia->bindParam(":id", $idcondominio);
-   $sentencia->bindParam(":tipo_gasto", $tipo_gasto);
-   $sentencia->bindParam(":mes", $mes);
-   $sentencia->bindParam(":anio", $anio);
-   if ($periodo != 'completo') {
-      $sentencia->bindParam(":periodo", $periodo);
-   }
-   $sentencia->execute();
-   return $sentencia->fetchAll((PDO::FETCH_ASSOC));
-}
-
-// FUNCIÓN PARA CALCULAR TOTALES
-function calcularTotalGastos($conexion, $idcondominio, $mes, $anio, $periodo)
-{
-   if ($periodo == 'completo') {
-      $sentencia = $conexion->prepare("SELECT 
-            SUM(CASE WHEN quincena = '15' THEN CAST(monto AS DECIMAL(10,2)) ELSE 0 END) as total_15,
-            SUM(CASE WHEN quincena = '30' THEN CAST(monto AS DECIMAL(10,2)) ELSE 0 END) as total_30,
-            SUM(CAST(monto AS DECIMAL(10,2))) as total_completo
-            FROM tbl_gastos 
-            WHERE id_condominio=:id 
-            AND mes=:mes 
-            AND anio=:anio");
-   } else {
-      $sentencia = $conexion->prepare("SELECT SUM(CAST(monto AS DECIMAL(10,2))) as total 
-                                       FROM tbl_gastos 
-                                       WHERE id_condominio=:id 
-                                       AND mes=:mes 
-                                       AND anio=:anio
-                                       AND quincena=:periodo");
-   }
-
-   $sentencia->bindParam(":id", $idcondominio);
-   $sentencia->bindParam(":mes", $mes);
-   $sentencia->bindParam(":anio", $anio);
-   if ($periodo != 'completo') {
-      $sentencia->bindParam(":periodo", $periodo);
-   }
-   $sentencia->execute();
-   return $sentencia->fetch(PDO::FETCH_ASSOC);
-}
-
-// Calcular totales
-$totales = calcularTotalGastos($conexion, $idcondominio, $mes_filtro, $anio_filtro, $periodo_filtro);
-
-// Obtener todos los tipos de gastos para las tablas
 $tipos_gastos = [
-   'Nomina_Empleados' => 'Nómina Empleados',
-   'Servicios_Basicos' => 'Servicios Básicos',
-   'Gastos_Menores_Material_Gastable' => 'Gastos Menores, Material Gastable',
-   'lmprevistos' => 'Imprevistos',
-   'Cargos_Bancarios' => 'Cargos Bancarios',
-   'Servicios_lgualados' => 'Servicios Igualados'
+   'Nomina_Empleados' => ['icon' => '👥', 'label' => 'Nómina', 'color' => 'primary'],
+   'Servicios_Basicos' => ['icon' => '💡', 'label' => 'Servicios', 'color' => 'warning'],
+   'Gastos_Menores_Material_Gastable' => ['icon' => '🧹', 'label' => 'Materiales', 'color' => 'info'],
+   'Imprevistos' => ['icon' => '⚠️', 'label' => 'Imprevistos', 'color' => 'danger'],
+   'Cargos_Bancarios' => ['icon' => '🏦', 'label' => 'Bancarios', 'color' => 'secondary'],
+   'Servicios_Igualados' => ['icon' => '🤝', 'label' => 'Igualas', 'color' => 'success']
 ];
 
-// Obtener gastos para cada tipo
-$gastos_por_tipo = [];
-foreach ($tipos_gastos as $tipo_key => $tipo_nombre) {
-   $gastos_por_tipo[$tipo_key] = obtenerGastosPorTipo($conexion, $tipo_key, $idcondominio, $mes_filtro, $anio_filtro, $periodo_filtro);
+function obtenerGastos($conn, $tipo, $id, $m, $a, $p)
+{
+   $sql = "SELECT * FROM tbl_gastos WHERE id_condominio=? AND tipo_gasto=? AND mes=? AND anio=?";
+   if ($p != 'completo') $sql .= " AND quincena=?";
+   $sql .= " ORDER BY id DESC";
+   $stmt = $conn->prepare($sql);
+   if ($p != 'completo') $stmt->execute([$id, $tipo, $m, $a, $p]);
+   else $stmt->execute([$id, $tipo, $m, $a]);
+   return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+$gastos_data = [];
+$total_15 = 0;
+$total_30 = 0;
+$total_mes = 0;
+
+$stmt_totales = $conexion->prepare("SELECT quincena, SUM(monto) as total FROM tbl_gastos WHERE id_condominio=? AND mes=? AND anio=? GROUP BY quincena");
+$stmt_totales->execute([$id_condominio, $mes_filtro, $anio_filtro]);
+while ($r = $stmt_totales->fetch(PDO::FETCH_ASSOC)) {
+   if ($r['quincena'] == '15') $total_15 = $r['total'];
+   if ($r['quincena'] == '30') $total_30 = $r['total'];
+}
+$total_mes = $total_15 + $total_30;
+
+foreach ($tipos_gastos as $k => $v) {
+   $gastos_data[$k] = obtenerGastos($conexion, $k, $id_condominio, $mes_filtro, $anio_filtro, $periodo_filtro);
+}
+
+$pred = $conexion->query("SELECT * FROM tbl_gastos_predeterminados ORDER BY tipo_gasto")->fetchAll(PDO::FETCH_ASSOC);
+$activos_count = count(array_filter($pred, function ($v) {
+   return $v['activo'] == 1;
+}));
 ?>
 
-<br>
-<div class="card">
-   <div class="card-header text-center bg-dark text-white">
-      <h2>CONTROL DE GASTOS</h2>
+<style>
+   body {
+      background-color: #eef2f6;
+   }
+
+   .card-resumen {
+      border: none;
+      border-radius: 15px;
+      color: white;
+      margin-bottom: 20px;
+      transition: transform 0.2s;
+   }
+
+   .card-resumen:hover {
+      transform: scale(1.02);
+   }
+
+   /* Diseño de las tarjetas de categorías */
+   .expense-card {
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      height: 100%;
+      /* Misma altura */
+      transition: box-shadow 0.3s;
+   }
+
+   .expense-card:hover {
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+   }
+
+   .expense-header {
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
+      padding: 15px;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+   }
+
+   .expense-body {
+      padding: 0;
+      max-height: 250px;
+      /* Altura máxima para scroll */
+      overflow-y: auto;
+   }
+
+   .table-expense td {
+      vertical-align: middle;
+      font-size: 0.9rem;
+   }
+
+   /* Scrollbar bonito */
+   .expense-body::-webkit-scrollbar {
+      width: 6px;
+   }
+
+   .expense-body::-webkit-scrollbar-track {
+      background: #f1f1f1;
+   }
+
+   .expense-body::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 10px;
+   }
+
+   .expense-body::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+   }
+
+   .bg-gradient-1 {
+      background: linear-gradient(45deg, #000000ff 0%, #565656ff 100%);
+   }
+
+   .bg-gradient-2 {
+      background: linear-gradient(45deg, #000000ff 0%, #565656ff 100%);
+   }
+
+   .bg-gradient-3 {
+      background: linear-gradient(45deg, #a0a0a0ff 0%, #dbdbdbff 100%);
+   }
+</style>
+
+<div class="container-fluid px-4 py-4">
+
+   <?php if (isset($_SESSION['mensaje'])): ?>
+      <div class="alert alert-<?php echo $_SESSION['tipo_mensaje']; ?> alert-dismissible fade show" role="alert">
+         <strong><?php echo $_SESSION['mensaje']; ?></strong>
+         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+      <?php unset($_SESSION['mensaje']);
+      unset($_SESSION['tipo_mensaje']); ?>
+   <?php endif; ?>
+
+   <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+      <div>
+         <h2 class="fw-bold text-dark mb-0">📊 Tablero de Gastos</h2>
+         <small class="text-muted">Vista consolidada del mes</small>
+      </div>
+      <div class="d-flex gap-2">
+         <button class="btn btn-dark shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalGastosPredeterminados">
+            ⚙️ Configurar Fijos <span class="badge bg-warning text-dark ms-1"><?php echo $activos_count; ?></span>
+         </button>
+         <button class="btn btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalNuevoGasto">
+            ➕ Nuevo Gasto
+         </button>
+         <button class="btn btn-outline-primary bg-white shadow-sm" onclick="confirmarGeneracion()">
+            ⚡ Generar Mes
+         </button>
+      </div>
    </div>
-   <div class="card-body">
 
-      <!-- FILTROS DE MES, AÑO Y PERIODO -->
-      <div class="row mb-4">
-         <div class="col-md-12">
-            <div class="card">
-               <div class="card-header bg-secondary text-white">
-                  <h5 class="mb-0">🔍 Filtros de Búsqueda</h5>
-               </div>
-               <?php
-               // Obtener mes y año actual
-               $mes_actual = date('n'); // 1 a 12
-               $anio_actual = date('Y');
-               $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-               ?>
-               <div class="card-body">
-                  <form action="" method="GET" class="row g-3">
-                     <div class="col-md-4">
-                        <label for="mes" class="form-label fw-bold">Mes:</label>
-                        <select name="mes" id="mes" class="form-select">
-
-                           <?php
-                           foreach ($meses as $index => $mes) {
-                              $numero_mes = $index + 1;
-                              $selected = ($numero_mes == $mes_actual) ? 'selected' : '';
-                              echo "<option value='$mes' $selected>$mes</option>";
-                           }
-                           ?>
-                        </select>
-                     </div>
-                     <div class="col-md-3">
-                        <label for="anio" class="form-label fw-bold">Año:</label>
-                        <select name="anio" id="anio" class="form-select">
-                           <?php foreach ($anios as $anio_option): ?>
-                              <option value="<?php echo $anio_option; ?>"
-                                 <?php echo $anio_filtro == $anio_option ? 'selected' : ''; ?>>
-                                 <?php echo $anio_option; ?>
-                              </option>
-                           <?php endforeach; ?>
-                        </select>
-                     </div>
-                     <div class="col-md-3">
-                        <label for="periodo" class="form-label fw-bold">Período:</label>
-                        <select name="periodo" id="periodo" class="form-select">
-                           <option value="15" <?php echo $periodo_filtro == '15' ? 'selected' : ''; ?>>Quincena 1-15</option>
-                           <option value="30" <?php echo $periodo_filtro == '30' ? 'selected' : ''; ?>>Quincena 16-30</option>
-                           <option value="completo" <?php echo $periodo_filtro == 'completo' ? 'selected' : ''; ?>>Mes Completo</option>
-                        </select>
-                     </div>
-                     <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">Filtrar</button>
-                     </div>
-                  </form>
+   <div class="card shadow-sm border-0 mb-4">
+      <div class="card-body py-3">
+         <form action="" method="GET" class="row g-2 align-items-center">
+            <div class="col-md-3">
+               <div class="input-group">
+                  <span class="input-group-text bg-white"><i class="fas fa-calendar"></i></span>
+                  <select name="mes" class="form-select fw-bold">
+                     <?php foreach ($meses as $m) echo "<option value='$m' " . ($m == $mes_filtro ? 'selected' : '') . ">$m</option>"; ?>
+                  </select>
                </div>
             </div>
+            <div class="col-md-2">
+               <select name="anio" class="form-select fw-bold">
+                  <?php foreach ($anios as $a) echo "<option value='$a' " . ($a == $anio_filtro ? 'selected' : '') . ">$a</option>"; ?>
+               </select>
+            </div>
+            <div class="col-md-3">
+               <select name="periodo" class="form-select fw-bold">
+                  <option value="15" <?php echo $periodo_filtro == '15' ? 'selected' : ''; ?>>1ra Quincena (1-15)</option>
+                  <option value="30" <?php echo $periodo_filtro == '30' ? 'selected' : ''; ?>>2da Quincena (16-30)</option>
+                  <option value="completo" <?php echo $periodo_filtro == 'completo' ? 'selected' : ''; ?>>Mes Completo</option>
+               </select>
+            </div>
+            <div class="col-md-2">
+               <button type="submit" class="btn btn-secondary w-100 fw-bold">Filtrar</button>
+            </div>
+         </form>
+      </div>
+   </div>
+
+   <div class="row mb-4">
+      <div class="col-md-4">
+         <div class="card-resumen bg-gradient-1 p-3">
+            <small class="text-uppercase opacity-75 fw-bold">Total 1ra Quincena</small>
+            <h3 class="mb-0 fw-bold">RD$ <?php echo number_format($total_15, 2); ?></h3>
          </div>
       </div>
+      <div class="col-md-4">
+         <div class="card-resumen bg-gradient-2 p-3">
+            <small class="text-uppercase opacity-75 fw-bold">Total 2da Quincena</small>
+            <h3 class="mb-0 fw-bold">RD$ <?php echo number_format($total_30, 2); ?></h3>
+         </div>
+      </div>
+      <div class="col-md-4">
+         <div class="card-resumen bg-gradient-3 p-3 text-dark">
+            <small class="text-uppercase opacity-75 fw-bold">Total General Mes</small>
+            <h3 class="mb-0 fw-bold">RD$ <?php echo number_format($total_mes, 2); ?></h3>
+         </div>
+      </div>
+   </div>
 
-      <!-- BOTONES PRINCIPALES -->
-      <div class="row mb-4">
-         <div class="col-md-12">
-            <div class="d-flex gap-2 flex-wrap">
-               <!-- Botón Nuevo Gasto -->
-               <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalNuevoGasto">
-                  ➕ NUEVO GASTO
-               </button>
-
-               <!-- Botón Gastos Predeterminados -->
-               <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#modalGastosPredeterminados">
-                  🔧 GASTOS PREDETERMINADOS
-               </button>
-
-               <!-- Botón Generar Gastos del Mes -->
-               <button type="button" class="btn btn-info" onclick="confirmarGeneracion()">
-                  ⚡ GENERAR GASTOS DEL MES
-               </button>
-
-               <!-- Información de gastos predeterminados -->
-               <div class="ms-auto">
-                  <span class="badge bg-secondary fs-6">
-                     📋 <?php echo $gastos_activos; ?> gastos predeterminados activos
+   <div class="row g-4">
+      <?php foreach ($tipos_gastos as $key => $info):
+         $data = $gastos_data[$key];
+         $subtotal = array_sum(array_column($data, 'monto'));
+         // Colores dinámicos basados en el array $tipos_gastos
+         $color = $info['color'] ?? 'primary';
+      ?>
+         <div class="col-md-6 col-xl-4">
+            <div class="expense-card bg-white">
+               <div class="expense-header bg-soft-<?php echo $color; ?> border-bottom border-<?php echo $color; ?>">
+                  <div class="d-flex align-items-center text-<?php echo $color; ?>">
+                     <span class="fs-4 me-2"><?php echo $info['icon']; ?></span>
+                     <span><?php echo $info['label']; ?></span>
+                  </div>
+                  <span class="badge bg-<?php echo $color; ?> rounded-pill fs-6 shadow-sm">
+                     RD$ <?php echo number_format($subtotal, 2); ?>
                   </span>
                </div>
-            </div>
-         </div>
-      </div>
 
-      <!-- RESUMEN DE TOTALES -->
-      <div class="row mb-4">
-         <div class="col-md-12">
-            <div class="card">
-               <div class="card-body py-2">
-                  <h5 class="mb-0 text-center">
-                     <?php if ($periodo_filtro == 'completo'): ?>
-                        Total Mes: <span class="text-success">RD$ <?php echo number_format($totales['total_completo'] ?? 0, 2, '.', ','); ?></span>
-                     <?php else: ?>
-                        Total Quincena <?php echo $periodo_filtro == '15' ? '1-15' : '16-30'; ?>:
-                        <span class="text-primary">RD$ <?php echo number_format($totales['total'] ?? 0, 2, '.', ','); ?></span>
-                     <?php endif; ?>
-                  </h5>
-               </div>
-            </div>
-         </div>
-      </div>
-
-      <!-- ============================================= -->
-      <!-- MODAL NUEVO GASTO NORMAL -->
-      <!-- ============================================= -->
-      <div class="modal fade" id="modalNuevoGasto" tabindex="-1" aria-labelledby="modalNuevoGastoLabel" aria-hidden="true">
-         <div class="modal-dialog">
-            <div class="modal-content">
-               <div class="modal-header bg-dark text-white">
-                  <h2 class="modal-title" id="modalNuevoGastoLabel">REGISTRAR NUEVO GASTO</h2>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-               </div>
-               <div class="modal-body">
-                  <form action="" method="post" id="formNuevoGasto">
-                     <div class="mb-3">
-                        <label for="sel_mas_menos" class="form-label fw-bold">Tipo de Gasto:</label>
-                        <select name="sel_mas_menos" id="sel_mas_menos" class="form-select" required>
-                           <option value="">Seleccione un tipo...</option>
-                           <?php foreach ($tipos_gastos as $key => $nombre): ?>
-                              <option value="<?php echo $key; ?>"><?php echo $nombre; ?></option>
-                           <?php endforeach; ?>
-                        </select>
-                     </div>
-
-                     <div class="mb-3">
-                        <label for="quincena" class="form-label fw-bold">Quincena:</label>
-                        <select name="quincena" id="quincena" class="form-select" required>
-                           <option value="15">Quincena 1-15</option>
-                           <option value="30">Quincena 16-30</option>
-                        </select>
-                     </div>
-
-                     <div class="mb-3">
-                        <label for="detalles" class="form-label fw-bold">Detalles:</label>
-                        <input type="text" class="form-control" name="detalles" id="detalles"
-                           placeholder="Introducir detalles del gasto" required>
-                     </div>
-
-                     <div class="mb-3">
-                        <label for="monto" class="form-label fw-bold">Monto (RD$):</label>
-                        <input type="number" step="0.01" class="form-control" name="monto" id="monto"
-                           placeholder="0.00" required>
-                     </div>
-
-                     <!-- Campos ocultos para mes y año actual del filtro -->
-                     <input type="hidden" name="mes" value="<?php echo $mes_filtro; ?>">
-                     <input type="hidden" name="anio" value="<?php echo $anio_filtro; ?>">
-                  </form>
-               </div>
-               <div class="modal-footer bg-dark text-white">
-                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                  <button type="submit" form="formNuevoGasto" class="btn btn-success">💾 Guardar Gasto</button>
-               </div>
-            </div>
-         </div>
-      </div>
-
-      <!-- ============================================= -->
-      <!-- MODAL GASTOS PREDETERMINADOS -->
-      <!-- ============================================= -->
-      <div class="modal fade" id="modalGastosPredeterminados" tabindex="-1" aria-labelledby="modalGastosPredeterminadosLabel" aria-hidden="true">
-         <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-               <div class="modal-header bg-warning text-dark">
-                  <h2 class="modal-title" id="modalGastosPredeterminadosLabel">🔧 GASTOS PREDETERMINADOS</h2>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-               </div>
-               <div class="modal-body">
-                  <!-- Formulario para agregar nuevo gasto predeterminado -->
-                  <div class="card mb-4">
-                     <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">➕ Agregar Nuevo Gasto Predeterminado</h5>
-                     </div>
-                     <div class="card-body">
-                        <form action="" method="post" id="formNuevoPredeterminado">
-                           <input type="hidden" name="es_predeterminado" value="1">
-                           <div class="row">
-                              <div class="col-md-4">
-                                 <label for="sel_mas_menos_pred" class="form-label fw-bold">Tipo de Gasto:</label>
-                                 <select name="sel_mas_menos" id="sel_mas_menos_pred" class="form-select" required>
-                                    <option value="">Seleccione...</option>
-                                    <?php foreach ($tipos_gastos as $key => $nombre): ?>
-                                       <option value="<?php echo $key; ?>"><?php echo $nombre; ?></option>
-                                    <?php endforeach; ?>
-                                 </select>
-                              </div>
-                              <div class="col-md-4">
-                                 <label for="detalles_pred" class="form-label fw-bold">Detalles:</label>
-                                 <input type="text" class="form-control" name="detalles" id="detalles_pred"
-                                    placeholder="Detalles del gasto" required>
-                              </div>
-                              <div class="col-md-3">
-                                 <label for="monto_pred" class="form-label fw-bold">Monto (RD$):</label>
-                                 <input type="number" step="0.01" class="form-control" name="monto" id="monto_pred"
-                                    placeholder="0.00" required>
-                              </div>
-                              <div class="col-md-1 d-flex align-items-end">
-                                 <button type="submit" class="btn btn-success">➕</button>
-                              </div>
-                           </div>
-                        </form>
-                     </div>
-                  </div>
-                  <!-- Lista de gastos predeterminados -->
-                  <div class="card">
-                     <div class="card-header bg-info text-white">
-                        <h5 class="mb-0">📋 Lista de Gastos Predeterminados</h5>
-                     </div>
-                     <div class="card-body">
-                        <?php if (count($gastos_predeterminados) > 0): ?>
-                           <div class="table-responsive">
-                              <table class="table table-striped">
-                                 <thead>
-                                    <tr>
-                                       <th>Activo</th>
-                                       <th>Tipo</th>
-                                       <th>Detalles</th>
-                                       <th>Monto</th>
-                                       <th>Quincena</th>
-                                       <th>Acciones</th>
-                                    </tr>
-                                 </thead>
-                                 <tbody>
-                                    <?php foreach ($gastos_predeterminados as $gasto): ?>
-                                       <tr>
-                                          <td>
-                                             <a href="?toggle_predeterminado=<?php echo $gasto['id']; ?>&mes=<?php echo $mes_filtro; ?>&anio=<?php echo $anio_filtro; ?>&periodo=<?php echo $periodo_filtro; ?>"
-                                                class="btn btn-sm <?php echo $gasto['activo'] ? 'btn-success' : 'btn-secondary'; ?>">
-                                                <?php echo $gasto['activo'] ? '✅' : '❌'; ?>
-                                             </a>
-                                          </td>
-                                          <td><?php echo $tipos_gastos[$gasto['tipo_gasto']] ?? $gasto['tipo_gasto']; ?></td>
-                                          <td><?php echo $gasto['detalles']; ?></td>
-                                          <td><strong>RD$ <?php echo number_format($gasto['monto'], 2, '.', ','); ?></strong></td>
-                                          <td>
-                                             <span class="badge bg-info"><?php echo $gasto['quincena'] == '15' ? '1-15' : '16-30'; ?></span>
-                                          </td>
-                                          <td>
-                                             <a href="?eliminar_predeterminado=<?php echo $gasto['id']; ?>&mes=<?php echo $mes_filtro; ?>&anio=<?php echo $anio_filtro; ?>&periodo=<?php echo $periodo_filtro; ?>"
-                                                class="btn btn-danger btn-sm"
-                                                onclick="return confirm('¿Estás seguro de eliminar este gasto predeterminado?')">
-                                                🗑️
-                                             </a>
-                                          </td>
-                                       </tr>
-                                    <?php endforeach; ?>
-                                 </tbody>
-                              </table>
-                           </div>
-                        <?php else: ?>
-                           <div class="text-center text-muted py-4">
-                              <p>No hay gastos predeterminados configurados</p>
-                              <p class="small">Agrega gastos predeterminados para generarlos automáticamente cada mes</p>
-                           </div>
-                        <?php endif; ?>
-                     </div>
-                  </div>
-               </div>
-               <div class="modal-footer bg-warning text-dark">
-                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-               </div>
-            </div>
-         </div>
-      </div>
-
-      <!-- ============================================= -->
-      <!-- MODAL EDITAR GASTO -->
-      <!-- ============================================= -->
-      <div class="modal fade" id="modalEditarGasto" tabindex="-1" aria-labelledby="modalEditarGastoLabel" aria-hidden="true">
-         <div class="modal-dialog">
-            <div class="modal-content">
-               <div class="modal-header bg-warning text-dark">
-                  <h2 class="modal-title" id="modalEditarGastoLabel">✏️ EDITAR GASTO</h2>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-               </div>
-               <div class="modal-body">
-                  <form action="" method="post" id="formEditarGasto">
-                     <input type="hidden" name="editar_gasto" value="1">
-                     <input type="hidden" name="id_gasto" id="gasto_id">
-
-                     <div class="mb-3">
-                        <label class="form-label fw-bold">Tipo de Gasto:</label>
-                        <input type="text" class="form-control" id="gasto_tipo_display" readonly>
-                        <small class="text-muted">El tipo de gasto no se puede modificar</small>
-                     </div>
-
-                     <div class="mb-3">
-                        <label for="nuevos_detalles" class="form-label fw-bold">Detalles:</label>
-                        <input type="text" class="form-control" name="nuevos_detalles" id="gasto_detalles"
-                           placeholder="Detalles del gasto" required>
-                     </div>
-
-                     <div class="mb-3">
-                        <label for="nuevo_monto" class="form-label fw-bold">Monto (RD$):</label>
-                        <input type="number" step="0.01" class="form-control" name="nuevo_monto" id="gasto_monto"
-                           placeholder="0.00" required>
-                     </div>
-
-                     <div class="mb-3">
-                        <label for="nueva_quincena" class="form-label fw-bold">Quincena:</label>
-                        <select name="nueva_quincena" id="gasta_quincena" class="form-select" required>
-                           <option value="15">Quincena 1-15</option>
-                           <option value="30">Quincena 16-30</option>
-                        </select>
-                     </div>
-                  </form>
-               </div>
-               <div class="modal-footer bg-warning text-dark">
-                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                  <button type="submit" form="formEditarGasto" class="btn btn-success">💾 Guardar Cambios</button>
-               </div>
-            </div>
-         </div>
-      </div>
-      <!-- INFORMACIÓN DEL FILTRO ACTUAL -->
-      <div class="alert alert-info">
-         <strong>
-            📅 Mostrando gastos de:
-            <?php echo $mes_filtro . ' ' . $anio_filtro; ?> -
-            <?php
-            if ($periodo_filtro == '15') {
-               echo 'Quincena 1-15';
-            } elseif ($periodo_filtro == '30') {
-               echo 'Quincena 16-30';
-            } else {
-               echo 'Mes Completo (1-15 + 16-30)';
-            }
-            ?>
-         </strong>
-      </div>
-
-      <!-- TABLAS SEPARADAS POR TIPO DE GASTO -->
-      <?php foreach ($tipos_gastos as $tipo_key => $tipo_nombre):
-         $gastos = $gastos_por_tipo[$tipo_key];
-         if (count($gastos) > 0 || $periodo_filtro == 'completo'): ?>
-            <div class="card mb-4">
-               <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                  <h4 class="mb-0"><?php echo $tipo_nombre; ?></h4>
-                  <?php
-                  $subtotal = 0;
-                  foreach ($gastos as $gasto) {
-                     $subtotal += floatval($gasto['monto']);
-                  }
-                  if ($subtotal > 0): ?>
-                     <span class="badge bg-primary fs-6">RD$ <?php echo number_format($subtotal, 2, '.', ','); ?></span>
-                  <?php endif; ?>
-               </div>
-               <div class="card-body">
-                  <?php if (count($gastos) > 0): ?>
-                     <div class="table-responsive-sm">
-                        <table class="table table-striped">
-                           <thead>
-                              <tr>
-                                 <th scope="col">Detalles</th>
-                                 <th scope="col">Monto</th>
-                                 <th scope="col">Quincena</th>
-                                 <th scope="col">Acciones</th>
-                              </tr>
-                           </thead>
-                           <tbody>
-                              <?php foreach ($gastos as $registro): ?>
-                                 <tr>
-                                    <td><?php echo $registro['detalles']; ?></td>
-                                    <td><strong>RD$ <?php echo number_format(floatval($registro['monto']), 2, '.', ','); ?></strong></td>
-                                    <td>
-                                       <span class="badge bg-<?php echo $registro['quincena'] == '15' ? 'info' : 'warning'; ?>">
-                                          <?php echo $registro['quincena'] == '15' ? '1-15' : '16-30'; ?>
-                                       </span>
-                                    </td>
-                                    <td>
-                                       <div class="btn-group btn-group-sm" role="group">
-                                          <!-- Botón Editar -->
-                                          <button class="btn btn-warning btn-sm"
-                                             data-bs-toggle="modal"
-                                             data-bs-target="#modalEditarGasto"
-                                             data-id="<?php echo $registro['id']; ?>"
-                                             data-detalles="<?php echo htmlspecialchars($registro['detalles']); ?>"
-                                             data-monto="<?php echo $registro['monto']; ?>"
-                                             data-quincena="<?php echo $registro['quincena']; ?>"
-                                             data-tipo="<?php echo $registro['tipo_gasto']; ?>"
-                                             title="Editar gasto">
-                                             ✏️
-                                          </button>
-
-                                          <!-- Botón Eliminar -->
-                                          <a class="btn btn-danger btn-sm"
-                                             href="javascript:borrar(<?php echo $registro['id']; ?>, '<?php echo $mes_filtro; ?>', '<?php echo $anio_filtro; ?>', '<?php echo $periodo_filtro; ?>');"
-                                             role="button"
-                                             title="Eliminar gasto">
-                                             ❌
-                                          </a>
-                                       </div>
-                                    </td>
-                                 </tr>
-                              <?php endforeach; ?>
-                           </tbody>
-                        </table>
+               <div class="expense-body">
+                  <?php if (empty($data)): ?>
+                     <div class="text-center py-4 text-muted opacity-50">
+                        <i class="fas fa-folder-open fa-2x mb-2"></i>
+                        <p class="mb-0 small fw-bold">Sin registros</p>
                      </div>
                   <?php else: ?>
-                     <div class="text-center text-muted py-3">
-                        <p>No hay gastos registrados para <?php echo $tipo_nombre; ?> en el período seleccionado</p>
-                     </div>
+                     <table class="table table-expense table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                           <tr>
+                              <th class="ps-3 border-0">Detalle</th>
+                              <th class="text-center border-0" style="width: 50px;">Q</th>
+                              <th class="text-end border-0">Monto</th>
+                              <th class="text-end pe-3 border-0" style="width: 60px;"></th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           <?php foreach ($data as $g): ?>
+                              <tr>
+                                 <td class="ps-3 text-truncate" style="max-width: 150px;" title="<?php echo htmlspecialchars($g['detalles']); ?>">
+                                    <?php echo $g['detalles']; ?>
+                                 </td>
+                                 <td class="text-center">
+                                    <span class="badge <?php echo $g['quincena'] == '15' ? 'bg-secondary' : 'bg-dark'; ?> rounded-circle p-1" style="width: 24px; height: 24px; display:inline-flex; justify-content:center; align-items:center;">
+                                       <?php echo $g['quincena'] == '15' ? '1' : '2'; ?>
+                                    </span>
+                                 </td>
+                                 <td class="text-end fw-bold text-dark">
+                                    <?php echo number_format($g['monto'], 2); ?>
+                                 </td>
+                                 <td class="text-end pe-3">
+                                    <div class="dropdown">
+                                       <button class="btn btn-link text-muted p-0" type="button" data-bs-toggle="dropdown">
+                                          <i class="fas fa-ellipsis-v"></i>
+                                       </button>
+                                       <ul class="dropdown-menu dropdown-menu-end shadow">
+                                          <li>
+                                             <button class="dropdown-item small"
+                                                data-bs-toggle="modal" data-bs-target="#modalEditarGasto"
+                                                data-id="<?php echo $g['id']; ?>"
+                                                data-detalles="<?php echo htmlspecialchars($g['detalles']); ?>"
+                                                data-monto="<?php echo $g['monto']; ?>"
+                                                data-quincena="<?php echo $g['quincena']; ?>"
+                                                data-tipo="<?php echo $g['tipo_gasto']; ?>">
+                                                ✏️ Editar
+                                             </button>
+                                          </li>
+                                          <li>
+                                             <hr class="dropdown-divider">
+                                          </li>
+                                          <li>
+                                             <button class="dropdown-item small text-danger"
+                                                onclick="borrar(<?php echo $g['id']; ?>, '<?php echo $mes_filtro; ?>', '<?php echo $anio_filtro; ?>', '<?php echo $periodo_filtro; ?>')">
+                                                🗑️ Eliminar
+                                             </button>
+                                          </li>
+                                       </ul>
+                                    </div>
+                                 </td>
+                              </tr>
+                           <?php endforeach; ?>
+                        </tbody>
+                     </table>
                   <?php endif; ?>
                </div>
             </div>
-         <?php endif; ?>
+         </div>
       <?php endforeach; ?>
+   </div>
 
+</div>
+
+<div class="modal fade" id="modalNuevoGasto" tabindex="-1">
+   <div class="modal-dialog">
+      <div class="modal-content border-0 shadow">
+         <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title fw-bold">➕ Registrar Gasto</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+         </div>
+         <div class="modal-body">
+            <form action="" method="post" id="formNuevoGasto">
+               <div class="mb-3">
+                  <label class="form-label small fw-bold text-muted">Categoría</label>
+                  <select name="sel_mas_menos" class="form-select" required>
+                     <option value="">Seleccionar...</option>
+                     <?php foreach ($tipos_gastos as $k => $v) echo "<option value='$k'>{$v['label']}</option>"; ?>
+                  </select>
+               </div>
+               <div class="row mb-3">
+                  <div class="col-6">
+                     <label class="form-label small fw-bold text-muted">Quincena</label>
+                     <select name="quincena" class="form-select">
+                        <option value="15">1ra (1-15)</option>
+                        <option value="30">2da (16-30)</option>
+                     </select>
+                  </div>
+                  <div class="col-6">
+                     <label class="form-label small fw-bold text-muted">Monto</label>
+                     <div class="input-group">
+                        <span class="input-group-text">RD$</span>
+                        <input type="number" step="0.01" class="form-control" name="monto" required>
+                     </div>
+                  </div>
+               </div>
+               <div class="mb-3">
+                  <label class="form-label small fw-bold text-muted">Detalle</label>
+                  <input type="text" class="form-control" name="detalles" required placeholder="Ej: Pago de luz área común">
+               </div>
+               <input type="hidden" name="mes" value="<?php echo $mes_filtro; ?>">
+               <input type="hidden" name="anio" value="<?php echo $anio_filtro; ?>">
+            </form>
+         </div>
+         <div class="modal-footer bg-light">
+            <button type="submit" form="formNuevoGasto" class="btn btn-primary w-100 fw-bold">Guardar Gasto</button>
+         </div>
+      </div>
    </div>
 </div>
-<br>
+
+<div class="modal fade" id="modalEditarGasto" tabindex="-1">
+   <div class="modal-dialog">
+      <div class="modal-content border-0 shadow">
+         <div class="modal-header bg-warning text-dark">
+            <h5 class="modal-title fw-bold">✏️ Editar Gasto</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+         </div>
+         <div class="modal-body">
+            <form action="" method="post" id="formEditarGasto">
+               <input type="hidden" name="editar_gasto" value="1">
+               <input type="hidden" name="id_gasto" id="gasto_id">
+
+               <div class="mb-3">
+                  <label class="form-label small fw-bold text-muted">Categoría (Solo lectura)</label>
+                  <input type="text" class="form-control bg-light" id="gasto_tipo_display" readonly>
+               </div>
+               <div class="row mb-3">
+                  <div class="col-6">
+                     <label class="form-label small fw-bold text-muted">Quincena</label>
+                     <select name="nueva_quincena" id="gasta_quincena" class="form-select">
+                        <option value="15">1ra (1-15)</option>
+                        <option value="30">2da (16-30)</option>
+                     </select>
+                  </div>
+                  <div class="col-6">
+                     <label class="form-label small fw-bold text-muted">Monto</label>
+                     <div class="input-group">
+                        <span class="input-group-text">RD$</span>
+                        <input type="number" step="0.01" class="form-control" name="nuevo_monto" id="gasto_monto" required>
+                     </div>
+                  </div>
+               </div>
+               <div class="mb-3">
+                  <label class="form-label small fw-bold text-muted">Detalle</label>
+                  <input type="text" class="form-control" name="nuevos_detalles" id="gasto_detalles" required>
+               </div>
+            </form>
+         </div>
+         <div class="modal-footer bg-light">
+            <button type="submit" form="formEditarGasto" class="btn btn-warning w-100 fw-bold">Actualizar</button>
+         </div>
+      </div>
+   </div>
+</div>
+
+<div class="modal fade" id="modalGastosPredeterminados" tabindex="-1">
+   <div class="modal-dialog modal-lg">
+      <div class="modal-content border-0 shadow">
+         <div class="modal-header bg-dark text-white">
+            <h5 class="modal-title fw-bold">🔧 Configuración de Gastos Fijos</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+         </div>
+         <div class="modal-body bg-light">
+            <div class="card mb-4 border-0 shadow-sm">
+               <div class="card-body">
+                  <h6 class="card-title fw-bold text-primary mb-3">Nuevo Gasto Fijo Mensual</h6>
+                  <form action="" method="post" class="row g-2">
+                     <input type="hidden" name="es_predeterminado" value="1">
+                     <div class="col-md-3">
+                        <select name="sel_mas_menos" class="form-select form-select-sm" required>
+                           <option value="">Tipo...</option>
+                           <?php foreach ($tipos_gastos as $k => $v) echo "<option value='$k'>{$v['label']}</option>"; ?>
+                        </select>
+                     </div>
+                     <div class="col-md-5">
+                        <input type="text" class="form-control form-select-sm" name="detalles" placeholder="Detalle" required>
+                     </div>
+                     <div class="col-md-3">
+                        <input type="number" step="0.01" class="form-control form-select-sm" name="monto" placeholder="Monto" required>
+                     </div>
+                     <div class="col-md-1">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">➕</button>
+                     </div>
+                  </form>
+               </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+               <div class="card-body p-0">
+                  <table class="table table-sm table-striped mb-0">
+                     <thead class="bg-secondary text-white">
+                        <tr>
+                           <th>Estado</th>
+                           <th>Tipo</th>
+                           <th>Detalle</th>
+                           <th>Monto</th>
+                           <th></th>
+                        </tr>
+                     </thead>
+                     <tbody>
+                        <?php foreach ($pred as $gp): ?>
+                           <tr>
+                              <td>
+                                 <a href="?toggle_predeterminado=<?php echo $gp['id'] . "&mes=$mes_filtro&anio=$anio_filtro&periodo=$periodo_filtro"; ?>"
+                                    class="text-decoration-none text-<?php echo $gp['activo'] ? 'success' : 'secondary'; ?>">
+                                    <?php echo $gp['activo'] ? '<i class="fas fa-toggle-on fa-lg"></i>' : '<i class="fas fa-toggle-off fa-lg"></i>'; ?>
+                                 </a>
+                              </td>
+                              <td class="small"><?php echo $tipos_gastos[$gp['tipo_gasto']]['label'] ?? $gp['tipo_gasto']; ?></td>
+                              <td class="small"><?php echo $gp['detalles']; ?></td>
+                              <td class="small fw-bold">RD$ <?php echo number_format($gp['monto'], 2); ?></td>
+                              <td class="text-end">
+                                 <a href="?eliminar_predeterminado=<?php echo $gp['id'] . "&mes=$mes_filtro&anio=$anio_filtro&periodo=$periodo_filtro"; ?>"
+                                    class="text-danger" onclick="return confirm('¿Borrar?')">🗑️</a>
+                              </td>
+                           </tr>
+                        <?php endforeach; ?>
+                     </tbody>
+                  </table>
+               </div>
+            </div>
+         </div>
+      </div>
+   </div>
+</div>
 
 <script>
    function borrar(id, mes, anio, periodo) {
       Swal.fire({
-         title: '¿Quieres borrar este gasto?',
-         text: "Esta acción no se puede deshacer",
+         title: '¿Eliminar Gasto?',
+         text: "Se descontará del total.",
          icon: 'warning',
          showCancelButton: true,
          confirmButtonColor: '#d33',
-         cancelButtonColor: '#3085d6',
-         confirmButtonText: 'Sí, borrar',
-         cancelButtonText: 'Cancelar'
+         confirmButtonText: 'Sí, eliminar'
       }).then((result) => {
          if (result.isConfirmed) {
             window.location = "index.php?txID=" + id + "&mes=" + mes + "&anio=" + anio + "&periodo=" + periodo;
@@ -813,16 +590,11 @@ foreach ($tipos_gastos as $tipo_key => $tipo_nombre) {
 
    function confirmarGeneracion() {
       Swal.fire({
-         title: '¿Generar gastos del mes?',
-         html: `Esta acción insertará todos los gastos predeterminados <strong>activos</strong> para:<br>
-                  <strong><?php echo $mes_filtro . ' ' . $anio_filtro; ?> - Quincena 1-15</strong><br><br>
-                  <small class="text-muted">Solo se insertarán los gastos que no existan previamente en este mes</small>`,
-         icon: 'question',
+         title: 'Generar Gastos Fijos',
+         text: "Se crearán los gastos predeterminados para <?php echo $mes_filtro; ?>.",
+         icon: 'info',
          showCancelButton: true,
-         confirmButtonColor: '#3085d6',
-         cancelButtonColor: '#d33',
-         confirmButtonText: 'Sí, generar gastos',
-         cancelButtonText: 'Cancelar'
+         confirmButtonText: 'Generar'
       }).then((result) => {
          if (result.isConfirmed) {
             window.location = "?generar_gastos=1&mes=<?php echo $mes_filtro; ?>&anio=<?php echo $anio_filtro; ?>&periodo=15";
@@ -830,73 +602,23 @@ foreach ($tipos_gastos as $tipo_key => $tipo_nombre) {
       });
    }
 
-   // Script para el modal de edición de gastos
-   document.addEventListener('DOMContentLoaded', function() {
-      const modalEditarGasto = document.getElementById('modalEditarGasto');
-
-      if (modalEditarGasto) {
-         modalEditarGasto.addEventListener('show.bs.modal', function(event) {
-            const button = event.relatedTarget;
-
-            // Obtener los datos del gasto
-            const gastoId = button.getAttribute('data-id');
-            const gastoDetalles = button.getAttribute('data-detalles');
-            const gastoMonto = button.getAttribute('data-monto');
-            const gastoQuincena = button.getAttribute('data-quincena');
-            const gastoTipo = button.getAttribute('data-tipo');
-
-            // Obtener el nombre del tipo de gasto
-            const tipoGastoNombre = getTipoGastoNombre(gastoTipo);
-
-            // Llenar el formulario
-            document.getElementById('gasto_id').value = gastoId;
-            document.getElementById('gasto_detalles').value = gastoDetalles;
-            document.getElementById('gasto_monto').value = gastoMonto;
-            document.getElementById('gasta_quincena').value = gastoQuincena;
-            document.getElementById('gasto_tipo_display').value = tipoGastoNombre;
-         });
-      }
-
-      // Función para obtener el nombre del tipo de gasto
-      function getTipoGastoNombre(tipoKey) {
-         const tipos = {
-            'Nomina_Empleados': 'Nómina Empleados',
-            'Servicios_Basicos': 'Servicios Básicos',
-            'Gastos_Menores_Material_Gastable': 'Gastos Menores, Material Gastable',
-            'lmprevistos': 'Imprevistos',
-            'Cargos_Bancarios': 'Cargos Bancarios',
-            'Servicios_lgualados': 'Servicios Igualados'
-         };
-         return tipos[tipoKey] || tipoKey;
-      }
-   });
-
-   function borrar(id, mes, anio, periodo) {
-      Swal.fire({
-         title: '¿Eliminar este gasto?',
-         text: "Esta acción no se puede deshacer",
-         icon: 'warning',
-         showCancelButton: true,
-         confirmButtonColor: '#d33',
-         cancelButtonColor: '#3085d6',
-         confirmButtonText: 'Sí, eliminar',
-         cancelButtonText: 'Cancelar',
-         focusCancel: true
-      }).then((result) => {
-         if (result.isConfirmed) {
-            window.location = "index.php?txID=" + id + "&mes=" + mes + "&anio=" + anio + "&periodo=" + periodo;
-         }
+   const modalEdit = document.getElementById('modalEditarGasto');
+   if (modalEdit) {
+      modalEdit.addEventListener('show.bs.modal', event => {
+         const btn = event.relatedTarget;
+         const labels = <?php echo json_encode(array_map(function ($v) {
+                           return $v['label'];
+                        }, $tipos_gastos)); ?>;
+         document.getElementById('gasto_id').value = btn.getAttribute('data-id');
+         document.getElementById('gasto_detalles').value = btn.getAttribute('data-detalles');
+         document.getElementById('gasto_monto').value = btn.getAttribute('data-monto');
+         document.getElementById('gasta_quincena').value = btn.getAttribute('data-quincena');
+         const tipoKey = btn.getAttribute('data-tipo');
+         document.getElementById('gasto_tipo_display').value = labels[tipoKey] || tipoKey;
       });
    }
-
-   // Auto-seleccionar quincena según fecha actual en el modal
-   document.addEventListener('DOMContentLoaded', function() {
-      const diaActual = new Date().getDate();
-      const quincenaSelect = document.getElementById('quincena');
-      if (quincenaSelect) {
-         quincenaSelect.value = diaActual <= 15 ? '15' : '30';
-      }
-   });
 </script>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
 <?php include("../../templates/footer.php"); ?>

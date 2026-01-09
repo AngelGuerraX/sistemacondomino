@@ -1,109 +1,150 @@
 <?php
-
+$thetitle = "Gestión de Condominios";
 include("../../bd.php");
 
-
+// Lógica de borrado (Si se recibe txID)
 if (isset($_GET['txID'])) {
-
-   $txtID = (isset($_GET['txID'])) ? $_GET['txID'] : "";
-
+   $txtID = $_GET['txID'];
    $sentencia = $conexion->prepare("DELETE FROM tbl_condominios WHERE id=:id");
    $sentencia->bindParam(":id", $txtID);
    $sentencia->execute();
+   header("Location: index.php"); // Redirigir para limpiar la URL
+   exit;
 }
 
+// Consultar datos
 $sentencia = $conexion->prepare("SELECT * FROM tbl_condominios");
 $sentencia->execute();
-$lista_tbl_cargar_camion = $sentencia->fetchAll((PDO::FETCH_ASSOC));
+$lista_condominios = $sentencia->fetchAll(PDO::FETCH_ASSOC);
 
+include("../../templates/header.php");
 ?>
 
-<?php include("../../templates/header.php"); ?>
+<div class="container-fluid px-4 mt-4">
 
-<br>
-
-
-<div class="card">
-   <div class="card-header">
-      <center>
-         <h2>CONDOMINIOS</h2>
-      </center>
-   </div>
-   <div class="card-body">
-      <a name="" id="" class="btn btn-dark"
-         href="crear.php" role="button">
-         Nuevo
-      </a>
-      <br>
-      <br>
-      <div class="table-responsive">
-         <table class="table" id="tabla_id">
-            <thead>
-               <tr>
-                  <th scope="col">ID</th>
-                  <th scope="col">Nombre</th>
-                  <th scope="col">Ubicación</th>
-                  <th scope="col">Cuenta Bancaria</th>
-                  <th scope="col">Telefono</th>
-                  <th scope="col">Mora</th>
-                  <th scope="col">Gas</th>
-                  <th scope="col">Cuota</th>
-                  <th scope="col">Saldo Actual</th>
-                  <th scope="col">Acciones:</th>
-               </tr>
-            </thead>
-            <tbody>
-               <?php foreach ($lista_tbl_cargar_camion as $registro) { ?>
-
-                  <tr class="">
-                     <td scope="row"><?php echo $registro['id'] ?></td>
-                     <td scope="row"><?php echo $registro['nombre'] ?></td>
-                     <td scope="row"><?php echo $registro['ubicacion'] ?></td>
-                     <td scope="row"><?php echo $registro['cuenta_bancaria'] ?></td>
-                     <td scope="row"><?php echo $registro['telefono'] ?></td>
-                     <td scope="row"><?php echo $registro['mora'] ?></td>
-                     <td scope="row"><?php echo $registro['gas'] ?></td>
-                     <td scope="row"><?php echo $registro['cuota'] ?></td>
-                     <td scope="row"><?php $precio = $registro['saldo_actual'];
-                                       $precio_formateado = number_format($precio, 2, '.', ',');
-                                       echo $precio_formateado ?></td>
-                     <td>
-                        <a class="btn btn-dark" href="administrar.php?txID=<?php echo $registro['id'] ?>" role="button">Administrar</a>
-                        | <a class="btn btn-dark" href="editar.php?txID=<?php echo $registro['id'] ?>" role="button">Editar</a>
-                     </td>
-                  </tr>
-               <?php } ?>
-            </tbody>
-         </table>
+   <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+         <h1 class="mt-4"><i class="fas fa-building me-2 text-primary"></i>Condominios</h1>
+         <ol class="breadcrumb mb-4">
+            <li class="breadcrumb-item"><a href="../../index.php">Inicio</a></li>
+            <li class="breadcrumb-item active">Listado de Condominios</li>
+         </ol>
       </div>
+      <a href="crear.php" class="btn btn-primary btn-lg shadow-sm">
+         <i class="fas fa-plus me-2"></i> Nuevo Condominio
+      </a>
+   </div>
 
+   <div class="card shadow mb-4">
+      <div class="card-header bg-white py-3">
+         <i class="fas fa-table me-1"></i>
+         Registros Actuales
+      </div>
+      <div class="card-body">
+         <div class="table-responsive">
+            <table class="table table-hover table-bordered table-striped" id="tablaCondominios" width="100%" cellspacing="0">
+               <thead class="table-dark">
+                  <tr>
+                     <th width="5%" class="text-center">ID</th>
+                     <th width="20%">Nombre</th>
+                     <th>Ubicación</th>
+                     <th>Cuenta Bancaria</th>
+                     <th>Teléfono</th>
+                     <th class="text-center">Mora</th>
+                     <th class="text-center">Gas</th>
+                     <th class="text-center">Cuota</th>
+                     <th class="text-end">Saldo</th>
+                     <th width="15%" class="text-center">Acciones</th>
+                  </tr>
+               </thead>
+               <tbody>
+                  <?php foreach ($lista_condominios as $registro) { ?>
+                     <tr>
+                        <td class="text-center align-middle fw-bold"><?php echo $registro['id']; ?></td>
+                        <td class="align-middle fw-bold text-primary"><?php echo $registro['nombre']; ?></td>
+                        <td class="align-middle small"><?php echo $registro['ubicacion']; ?></td>
+                        <td class="align-middle small font-monospace"><?php echo $registro['cuenta_bancaria']; ?></td>
+                        <td class="align-middle small"><?php echo $registro['telefono']; ?></td>
+
+                        <td class="text-center align-middle">
+                           <?php if (strtolower($registro['mora']) == 'si'): ?>
+                              <span class="badge bg-success rounded-pill"><i class="fas fa-check"></i></span>
+                           <?php else: ?>
+                              <span class="badge bg-secondary rounded-pill"><i class="fas fa-times"></i></span>
+                           <?php endif; ?>
+                        </td>
+
+                        <td class="text-center align-middle">
+                           <?php if (strtolower($registro['gas']) == 'si'): ?>
+                              <span class="badge bg-success rounded-pill"><i class="fas fa-check"></i></span>
+                           <?php else: ?>
+                              <span class="badge bg-secondary rounded-pill"><i class="fas fa-times"></i></span>
+                           <?php endif; ?>
+                        </td>
+
+                        <td class="text-center align-middle">
+                           <?php if (strtolower($registro['cuota']) == 'si'): ?>
+                              <span class="badge bg-success rounded-pill"><i class="fas fa-check"></i></span>
+                           <?php else: ?>
+                              <span class="badge bg-secondary rounded-pill"><i class="fas fa-times"></i></span>
+                           <?php endif; ?>
+                        </td>
+
+                        <td class="text-end align-middle fw-bold text-dark">
+                           RD$ <?php echo number_format($registro['saldo_actual'], 2, '.', ','); ?>
+                        </td>
+
+                        <td class="text-center align-middle">
+                           <div class="btn-group" role="group">
+                              <a href="administrar.php?txID=<?php echo $registro['id']; ?>" class="btn btn-outline-info btn-sm" title="Administrar">
+                                 <i class="fas fa-cogs"></i>
+                              </a>
+                              <a href="editar.php?txID=<?php echo $registro['id']; ?>" class="btn btn-outline-warning btn-sm" title="Editar">
+                                 <i class="fas fa-pen"></i>
+                              </a>
+                              <button onclick="borrar(<?php echo $registro['id']; ?>)" class="btn btn-outline-danger btn-sm" title="Eliminar">
+                                 <i class="fas fa-trash"></i>
+                              </button>
+                           </div>
+                        </td>
+                     </tr>
+                  <?php } ?>
+               </tbody>
+            </table>
+         </div>
+      </div>
    </div>
 </div>
 
-
-<br>
-
-
 <script>
+   $(document).ready(function() {
+      $('#tablaCondominios').DataTable({
+         "language": {
+            "url": "//cdn.datatables.net/plug-ins/1.13.4/i18n/es-ES.json"
+         },
+         "order": [
+            [0, "asc"]
+         ], // Ordenar por ID ascendente
+         "pageLength": 10
+      });
+   });
+
    function borrar(id) {
-
-
       Swal.fire({
-         title: '¿Quieres borrar el registro?',
+         title: '¿Está seguro?',
+         text: "Se eliminará este condominio y toda su información vinculada.",
+         icon: 'warning',
          showCancelButton: true,
-         confirmButtonText: 'Si, borrar'
+         confirmButtonColor: '#d33',
+         cancelButtonColor: '#3085d6',
+         confirmButtonText: 'Sí, borrar',
+         cancelButtonText: 'Cancelar'
       }).then((result) => {
-         /* Read more about isConfirmed, isDenied below */
          if (result.isConfirmed) {
             window.location = "index.php?txID=" + id;
          }
       })
-
-      //
    }
 </script>
-
-
-
 
 <?php include("../../templates/footer.php"); ?>

@@ -1,4 +1,6 @@
-<?php include("../../templates/header.php"); ?>
+<?php
+$thetitle = "Generar Tickets";
+include("../../templates/header.php"); ?>
 <?php include("../../bd.php");
 
 $id_condominio = $_SESSION['idcondominio'] ?? 0;
@@ -111,8 +113,8 @@ if (isset($_POST['boton'])) {
                 $apto_numero = $row['apto'];
 
                 $sentencia = $conexion->prepare("INSERT INTO tbl_tickets 
-                    (id_apto, mantenimiento, mora, gas, cuota, mes, anio, estado, id_condominio, fecha_actual, usuario_registro) 
-                    VALUES (:id_apto, :mantenimiento, '0', '0', '0', :mes, :anio, 'Pendiente', :id_condominio, :fecha_actual, :usuario_registro)");
+                    (id_apto, mantenimiento, mora, mes, anio, estado, id_condominio, fecha_actual, usuario_registro) 
+                    VALUES (:id_apto, :mantenimiento, '0', :mes, :anio, 'Pendiente', :id_condominio, :fecha_actual, :usuario_registro)");
 
                 $sentencia->bindParam(':id_apto', $id_apto);
                 $sentencia->bindParam(':mantenimiento', $mantenimiento);

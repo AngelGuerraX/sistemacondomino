@@ -1,7 +1,6 @@
 <?php
 include("../../templates/header.php");
 include("../../bd.php");
-include("actualizar_balance.php");
 
 // Iniciar sesión si no está iniciada
 if (session_status() === PHP_SESSION_NONE) {
@@ -9,23 +8,6 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 $id_condominio = $_SESSION['idcondominio'];
-
-// SOLO actualizar cuando se presiona el botón explícitamente
-if (isset($_POST['actualizar_balances'])) {
-   $resultado = actualizarTodosBalances($id_condominio);
-
-   if ($resultado['success']) {
-      $_SESSION['mensaje'] = "✅ Balances actualizados correctamente para {$resultado['total_aptos']} apartamentos";
-      $_SESSION['tipo_mensaje'] = "success";
-   } else {
-      $_SESSION['mensaje'] = "❌ Error: " . $resultado['error'];
-      $_SESSION['tipo_mensaje'] = "danger";
-   }
-
-   // Redirigir para evitar reenvío del formulario
-   header("Location: balance_dashboard.php");
-   exit;
-}
 
 // Procesar actualización individual
 if (isset($_GET['actualizar_individual'])) {
@@ -110,12 +92,7 @@ $condominio = $sentencia_condominio->fetch(PDO::FETCH_ASSOC);
                <small class="text-warning"><?= $condominio['nombre'] ?? 'Condominio' ?> | Fórmula: BALANCE = TOTAL PAGOS - DEUDA PENDIENTE</small>
             </div>
             <div class="col-md-4 text-end">
-               <!-- Form para actualizar balances -->
-               <form method="POST" class="d-inline">
-                  <button type="submit" name="actualizar_balances" class="btn btn-warning btn-lg">
-                     🔄 Actualizar Todos
-                  </button>
-               </form>
+
                <!-- Botón para exportar Excel -->
                <a href="exportar_excel_general.php" class="btn btn-success btn-lg">
                   📊 Exportar Excel
@@ -185,6 +162,108 @@ $condominio = $sentencia_condominio->fetch(PDO::FETCH_ASSOC);
          </div>
       </div>
    </div>
+
+
+   <!-- Tabla Completa de Apartamentos -->
+   <div class="card mt-4">
+      <div class="card-header bg-dark text-white">
+         <div class="row align-items-center">
+            <div class="col-md-6">
+               <h5 class="mb-0">📋 LISTA COMPLETA DE APARTAMENTOS</h5>
+            </div>
+            <div class="col-md-6 text-end">
+               <small>Mostrando <?= count($lista_aptos) ?> apartamentos</small>
+            </div>
+         </div>
+      </div>
+      <div class="card-body">
+         <div class="table-responsive">
+            <table class="table table-striped table-hover" id="tablaBalances">
+               <thead class="table-dark">
+                  <tr>
+                     <th>#</th>
+                     <th>Apartamento</th>
+                     <th>Condómino</th>
+                     <th>Total Pagos</th>
+                     <th>Deuda Pendiente</th>
+                     <th>Balance</th>
+                     <th>Teléfono</th>
+                     <th>Último Pago</th>
+                     <th>Estado</th>
+                     <th>Acciones</th>
+                  </tr>
+               </thead>
+               <tbody>
+                  <?php
+                  $contador = 1;
+                  foreach ($lista_aptos as $apto):
+                     $estado = $apto['balance'] >= 0 ? 'success' : 'danger';
+                     $texto_estado = $apto['balance'] >= 0 ? 'AL DÍA' : 'DEUDOR';
+                  ?>
+                     <tr>
+                        <td><?= $contador++ ?></td>
+                        <td><strong><?= $apto['apto'] ?></strong></td>
+                        <td><?= $apto['condominos'] ?></td>
+                        <td class="text-success">
+                           <small>RD$ <?= number_format($apto['total_pagos'] ?? 0, 2) ?></small>
+                        </td>
+                        <td class="text-danger">
+                           <small>RD$ <?= number_format($apto['deuda_pendiente'] ?? 0, 2) ?></small>
+                        </td>
+                        <td class="fw-bold <?= $estado == 'success' ? 'text-success' : 'text-danger' ?>">
+                           RD$ <?= number_format($apto['balance'], 2) ?>
+                        </td>
+                        <td><?= $apto['telefono'] ?></td>
+                        <td>
+                           <small>
+                              <?= $apto['fecha_ultimo_pago'] ?
+                                 date('d/m/Y', strtotime($apto['fecha_ultimo_pago'])) :
+                                 '<span class="text-muted">Nunca</span>' ?>
+                           </small>
+                        </td>
+                        <td>
+                           <span class="badge bg-<?= $estado ?>">
+                              <?= $texto_estado ?>
+                           </span>
+                        </td>
+                        <td>
+                           <div class="btn-group btn-group-sm">
+                              <a href="<?php echo $url_base; ?>/secciones/Pagos/editar.php?txID=<?= $apto['id'] ?>"
+                                 class="btn btn-primary" title="Ver detalle">
+                                 👁️
+                              </a>
+
+                              <a href="javascript:void(0)"
+                                 onclick="debugBalance(<?= $apto['id'] ?>)"
+                                 class="btn btn-info" title="Debug cálculo">
+                                 🔍
+                              </a>
+                           </div>
+                        </td>
+                     </tr>
+                  <?php endforeach; ?>
+               </tbody>
+               <tfoot class="table-secondary">
+                  <tr>
+                     <td colspan="3" class="text-end"><strong>TOTALES:</strong></td>
+                     <td class="text-success">
+                        <strong>RD$ <?= number_format(array_sum(array_column($lista_aptos, 'total_pagos')), 2) ?></strong>
+                     </td>
+                     <td class="text-danger">
+                        <strong>RD$ <?= number_format(array_sum(array_column($lista_aptos, 'deuda_pendiente')), 2) ?></strong>
+                     </td>
+                     <td class="<?= $resumen['balance_total'] >= 0 ? 'text-success' : 'text-danger' ?>">
+                        <strong>RD$ <?= number_format($resumen['balance_total'], 2) ?></strong>
+                     </td>
+                     <td colspan="4"></td>
+                  </tr>
+               </tfoot>
+            </table>
+         </div>
+      </div>
+   </div>
+   <br>
+
 
    <div class="row">
       <!-- Top Deudores -->
@@ -275,108 +354,6 @@ $condominio = $sentencia_condominio->fetch(PDO::FETCH_ASSOC);
                   </a>
                </div>
             </div>
-         </div>
-      </div>
-   </div>
-
-   <!-- Tabla Completa de Apartamentos -->
-   <div class="card mt-4">
-      <div class="card-header bg-dark text-white">
-         <div class="row align-items-center">
-            <div class="col-md-6">
-               <h5 class="mb-0">📋 LISTA COMPLETA DE APARTAMENTOS</h5>
-            </div>
-            <div class="col-md-6 text-end">
-               <small>Mostrando <?= count($lista_aptos) ?> apartamentos</small>
-            </div>
-         </div>
-      </div>
-      <div class="card-body">
-         <div class="table-responsive">
-            <table class="table table-striped table-hover" id="tablaBalances">
-               <thead class="table-dark">
-                  <tr>
-                     <th>#</th>
-                     <th>Apartamento</th>
-                     <th>Condómino</th>
-                     <th>Total Pagos</th>
-                     <th>Deuda Pendiente</th>
-                     <th>Balance</th>
-                     <th>Teléfono</th>
-                     <th>Último Pago</th>
-                     <th>Estado</th>
-                     <th>Acciones</th>
-                  </tr>
-               </thead>
-               <tbody>
-                  <?php
-                  $contador = 1;
-                  foreach ($lista_aptos as $apto):
-                     $estado = $apto['balance'] >= 0 ? 'success' : 'danger';
-                     $texto_estado = $apto['balance'] >= 0 ? 'AL DÍA' : 'DEUDOR';
-                  ?>
-                     <tr>
-                        <td><?= $contador++ ?></td>
-                        <td><strong><?= $apto['apto'] ?></strong></td>
-                        <td><?= $apto['condominos'] ?></td>
-                        <td class="text-success">
-                           <small>RD$ <?= number_format($apto['total_pagos'] ?? 0, 2) ?></small>
-                        </td>
-                        <td class="text-danger">
-                           <small>RD$ <?= number_format($apto['deuda_pendiente'] ?? 0, 2) ?></small>
-                        </td>
-                        <td class="fw-bold <?= $estado == 'success' ? 'text-success' : 'text-danger' ?>">
-                           RD$ <?= number_format($apto['balance'], 2) ?>
-                        </td>
-                        <td><?= $apto['telefono'] ?></td>
-                        <td>
-                           <small>
-                              <?= $apto['fecha_ultimo_pago'] ?
-                                 date('d/m/Y', strtotime($apto['fecha_ultimo_pago'])) :
-                                 '<span class="text-muted">Nunca</span>' ?>
-                           </small>
-                        </td>
-                        <td>
-                           <span class="badge bg-<?= $estado ?>">
-                              <?= $texto_estado ?>
-                           </span>
-                        </td>
-                        <td>
-                           <div class="btn-group btn-group-sm">
-                              <a href="detalle_balance_apto.php?txID=<?= $apto['id'] ?>"
-                                 class="btn btn-primary" title="Ver detalle">
-                                 👁️
-                              </a>
-                              <a href="?actualizar_individual=<?= $apto['id'] ?>"
-                                 class="btn btn-warning" title="Actualizar balance">
-                                 🔄
-                              </a>
-                              <a href="javascript:void(0)"
-                                 onclick="debugBalance(<?= $apto['id'] ?>)"
-                                 class="btn btn-info" title="Debug cálculo">
-                                 🔍
-                              </a>
-                           </div>
-                        </td>
-                     </tr>
-                  <?php endforeach; ?>
-               </tbody>
-               <tfoot class="table-secondary">
-                  <tr>
-                     <td colspan="3" class="text-end"><strong>TOTALES:</strong></td>
-                     <td class="text-success">
-                        <strong>RD$ <?= number_format(array_sum(array_column($lista_aptos, 'total_pagos')), 2) ?></strong>
-                     </td>
-                     <td class="text-danger">
-                        <strong>RD$ <?= number_format(array_sum(array_column($lista_aptos, 'deuda_pendiente')), 2) ?></strong>
-                     </td>
-                     <td class="<?= $resumen['balance_total'] >= 0 ? 'text-success' : 'text-danger' ?>">
-                        <strong>RD$ <?= number_format($resumen['balance_total'], 2) ?></strong>
-                     </td>
-                     <td colspan="4"></td>
-                  </tr>
-               </tfoot>
-            </table>
          </div>
       </div>
    </div>
